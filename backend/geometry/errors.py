@@ -12,6 +12,7 @@ class GeometryErrorCode(StrEnum):
     UNREADABLE_STEP = "UNREADABLE_STEP"
     NO_SOLIDS = "NO_SOLIDS"
     INVALID_SOLID = "INVALID_SOLID"
+    DEGENERATE_SOLID = "DEGENERATE_SOLID"
 
 
 class GeometryError(Exception):

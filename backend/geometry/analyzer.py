@@ -5,6 +5,7 @@ from pathlib import Path
 
 from OCP.TopoDS import TopoDS_Shape
 
+from geometry.errors import GeometryError, GeometryErrorCode
 from geometry.features import (
     SolidFeatures,
     extract_features,
@@ -34,6 +35,19 @@ class SolidAnalysis:
     features: SolidFeatures
 
 
+def _require_measurable(measures: SolidMeasures, dimensions: tuple[float, float, float]) -> None:
+    """Reject solids that would round to zero in the output (and divide by zero in ratios)."""
+    if (
+        round(measures.volume_cm3, 4) <= 0
+        or round(measures.surface_area_cm2, 3) <= 0
+        or round(dimensions[2], 3) <= 0
+    ):
+        raise GeometryError(
+            GeometryErrorCode.DEGENERATE_SOLID,
+            "The part has zero (or practically zero) volume, area or thickness.",
+        )
+
+
 def analyze_solid(solid: TopoDS_Shape) -> SolidAnalysis:
     """Analyze one solid on its own. Kept separate so solids can later be quoted individually."""
     return SolidAnalysis(measures=measure_solid(solid), features=extract_features(solid))
@@ -57,6 +71,7 @@ def analyze_loaded(
     features = merge_features([p.features for p in parts])
 
     dimensions = box_dimensions(measures)
+    _require_measurable(measures, dimensions)
     stock = stock_volume_cm3(dimensions, stock_allowance_mm)
 
     warnings: list[str] = []

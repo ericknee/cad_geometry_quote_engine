@@ -5,6 +5,7 @@ Exit code 0 on success, 1 on any failure (error JSON on stdout), 2 on bad argume
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -14,9 +15,12 @@ from geometry.measures import DEFAULT_STOCK_ALLOWANCE_MM
 
 
 def _non_negative(text: str) -> float:
-    value = float(text)
-    if value < 0:
-        raise argparse.ArgumentTypeError("must be 0 or greater")
+    try:
+        value = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"'{text}' is not a number") from None
+    if not math.isfinite(value) or value < 0:
+        raise argparse.ArgumentTypeError("must be a finite number, 0 or greater")
     return value
 
 
@@ -48,17 +52,18 @@ def main(argv: list[str] | None = None) -> int:
         result = analyze_file(args.file, args.stock_allowance)
         # ensure_ascii keeps output safe on consoles that cannot print non-ASCII (Windows).
         text = json.dumps(result.model_dump(), indent=2 if args.pretty else None)
-        if args.out:
-            args.out.write_text(text + "\n", encoding="utf-8")
     except GeometryError as error:
         print(_error_json(error.code.value, error.message, args.pretty))
-        return 1
-    except OSError as error:
-        print(_error_json("OUTPUT_ERROR", f"Could not write output: {error}", args.pretty))
         return 1
     except Exception as error:  # Anything unexpected still gets a JSON error, not a traceback.
         print(_error_json("INTERNAL_ERROR", f"{type(error).__name__}: {error}", args.pretty))
         return 1
+    if args.out:
+        try:
+            args.out.write_text(text + "\n", encoding="utf-8")
+        except OSError as error:
+            print(_error_json("OUTPUT_ERROR", f"Could not write output: {error}", args.pretty))
+            return 1
     print(text)
     return 0
 

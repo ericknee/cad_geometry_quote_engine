@@ -38,7 +38,8 @@ def measure_solid(solid: TopoDS_Shape) -> SolidMeasures:
     return SolidMeasures(
         min_corner_mm=(low.X(), low.Y(), low.Z()),
         max_corner_mm=(high.X(), high.Y(), high.Z()),
-        volume_cm3=volume.Mass() / 1000,  # mm³ -> cm³
+        # abs(): a solid with reversed orientation reports negative volume.
+        volume_cm3=abs(volume.Mass()) / 1000,  # mm³ -> cm³
         surface_area_cm2=area.Mass() / 100,  # mm² -> cm²
     )
 

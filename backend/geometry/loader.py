@@ -41,7 +41,7 @@ def load_step(path: str | Path) -> LoadedStep:
             f"{', '.join(SUPPORTED_EXTENSIONS)}.",
         )
 
-    shape = _read_shape(path)
+    shape, source_units = _read_shape(path)
     solids = unique_subshapes(shape, TopAbs_SOLID)
     if not solids:
         raise GeometryError(
@@ -60,11 +60,11 @@ def load_step(path: str | Path) -> LoadedStep:
     return LoadedStep(
         file_name=path.name,
         solids=solids,
-        source_units=detect_source_units(path),
+        source_units=source_units,
     )
 
 
-def _read_shape(path: Path) -> TopoDS_Shape:
+def _read_shape(path: Path) -> tuple[TopoDS_Shape, str | None]:
     unreadable = GeometryError(
         GeometryErrorCode.UNREADABLE_STEP, f"Could not read '{path.name}' as a STEP file."
     )
@@ -75,10 +75,11 @@ def _read_shape(path: Path) -> TopoDS_Shape:
         if reader.TransferRoots() == 0:
             raise unreadable
         shape = reader.OneShape()
+        source_units = detect_source_units(reader)
     except GeometryError:
         raise
     except Exception as exc:  # The kernel raises generic errors; callers only see GeometryError.
         raise unreadable from exc
     if shape.IsNull():
         raise unreadable
-    return shape
+    return shape, source_units

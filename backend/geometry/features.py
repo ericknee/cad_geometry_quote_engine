@@ -21,7 +21,8 @@ class SolidFeatures:
 
 def extract_features(solid: TopoDS_Shape) -> SolidFeatures:
     faces = [TopoDS.Face(f) for f in unique_subshapes(solid, TopAbs_FACE)]
-    cylinders = [f for f in faces if BRepAdaptor_Surface(f).GetType() == GeomAbs_Cylinder]
+    adaptors = [(f, BRepAdaptor_Surface(f)) for f in faces]
+    cylinders = [(f, a) for f, a in adaptors if a.GetType() == GeomAbs_Cylinder]
     return SolidFeatures(
         face_count=len(faces),
         edge_count=len(unique_subshapes(solid, TopAbs_EDGE)),
