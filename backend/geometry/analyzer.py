@@ -103,6 +103,7 @@ def analyze_loaded(
             edge_count=features.edge_count,
             cylindrical_faces=features.cylindrical_faces,
             holes_detected=features.holes_detected,
+            setups=features.setups,
             sa_to_volume_ratio=round(
                 sa_to_volume_ratio(measures.surface_area_cm2, measures.volume_cm3), 3
             ),

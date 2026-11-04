@@ -40,9 +40,10 @@ class _Group:
     hi: float = -math.inf
 
 
-def count_holes(
+def find_hole_axes(
     solid: TopoDS_Shape, cylinders: list[tuple[TopoDS_Face, BRepAdaptor_Surface]]
-) -> int:
+) -> list[Vec]:
+    """One axis direction per hole (so len() is the hole count). Setups use the directions."""
     classifier = BRepClass3d_SolidClassifier(solid)
     # Future improvement: groups are keyed by axis line and radius only, so two same-size blind
     # holes drilled from opposite faces along one axis merge into one group (and one hole).
@@ -56,24 +57,24 @@ def count_holes(
         group.arc_deg += math.degrees(u_max - u_min)
         lo, hi = _axial_span(surface, v_min, v_max)
         group.lo, group.hi = min(group.lo, lo), max(group.hi, hi)
-    return _count_stacks(groups)
+    return _hole_axes(groups)
 
 
-def _count_stacks(groups: dict[GroupKey, _Group]) -> int:
-    """Count holes: a counterbore is several coaxial cylinders of different radius that touch
-    end to end, so those stacks count once."""
+def _hole_axes(groups: dict[GroupKey, _Group]) -> list[Vec]:
+    """List holes: a counterbore is several coaxial cylinders of different radius that touch
+    end to end, so those stacks give one entry."""
     spans_by_axis: dict[AxisKey, list[tuple[float, float]]] = {}
     for (direction, foot, _radius), group in groups.items():
         if group.arc_deg >= HOLE_MIN_ARC_DEG:
             spans_by_axis.setdefault((direction, foot), []).append((group.lo, group.hi))
-    holes = 0
-    for spans in spans_by_axis.values():
+    holes: list[Vec] = []
+    for (direction, _foot), spans in spans_by_axis.items():
         spans.sort()
-        holes += 1
+        holes.append(direction)
         reach = spans[0][1]
         for lo, hi in spans[1:]:
             if lo > reach + _TOUCH_MM:
-                holes += 1
+                holes.append(direction)
             reach = max(reach, hi)
     return holes
 
