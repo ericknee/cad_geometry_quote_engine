@@ -1,0 +1,13 @@
+{
+  "name": "vendra",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "be": "uv run python -m uvicorn api.main:app --reload --app-dir backend",
+    "fe": "npm run dev --prefix web",
+    "dev": "concurrently -n api,web -c blue,green \"uv run python -m uvicorn api.main:app --reload --app-dir backend\" \"npm run dev --prefix web\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
