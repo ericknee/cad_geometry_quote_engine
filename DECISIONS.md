@@ -127,12 +127,46 @@ Status: **Built** (in the code), **Decided** (agreed, not built yet).
 - **List returns `{items, total, limit, skip}`** — Decided
   - Note: the owner chose this because the dashboard needs a total for paging.
   - PRD deviation: the PRD shows a bare array.
+- **Allowed status changes by a reviewer: `quoted` → `reviewed`, any finished quote → `archived`** — Decided
+  - `queued`, `processing` and `failed` are set only by the system; a quote mid-job cannot be archived. Everything else returns 422.
+  - Alternatives: also allow un-archiving and `reviewed` → `quoted`; or allow any user-settable status from any state (simplest, but a failed quote could be marked reviewed).
+  - Note: the owner chose the stricter rule, which keeps the PRD lifecycle meaningful.
+- **One response model with optional result fields** — Built
+  - `QuoteDetail` has `geometry`, `cost_breakdown`, `lead_time` as `None` until the quote is priced, and `error` only when it failed. The dashboard row (`QuoteSummary`) is built from it, so the two cannot drift.
+  - Alternative: a separate model per status (stricter, but more types and a harder API schema).
+  - Note: the owner chose the single model for simplicity.
+  - PRD deviation: the geometry result is stored whole under `geometry`, so the PRD's separate `features` object is `geometry.features`.
+- **Status changes are compare-and-set** — Built
+  - The update only applies if the quote still has the status that was read, so a reviewer and the worker cannot overwrite each other. A lost race returns 409 (`STATUS_CONFLICT`).
+- **Atomic job claim** — Built
+  - The worker takes the oldest `queued` quote and marks it `processing` in one database operation, so two workers can never get the same job. Verified with 25 simultaneous claims against 10 quotes.
+- **Each analysis runs in a child process** — Built
+  - The worker runs the existing CLI (`python -m geometry <file>`) per job. Exit code 0 is a result, 1 is a normal error (bad file); anything else, an unreadable output or a timeout (120 s) counts as a crash.
+  - Why: a hard crash in the C++ kernel cannot be caught in Python and would kill the worker. In a child process only that job is affected.
+  - Alternatives: run in the worker itself (simpler, but one bad file could crash-loop the worker and block the queue); a process pool (needs pickling and pool rebuilding after a crash).
+  - Cost: about 1 s of extra start-up per job (the gear takes under 1 s in total).
+  - Note: the owner chose crash isolation for this reason.
+- **Crashed analyses are retried, up to 3 retries** — Built
+  - A counter (`attempts`) goes up each time a job is claimed. A crash puts the job back in the queue while retries remain; after the first try plus 3 retries (4 attempts) the quote is `failed` with `ANALYSIS_CRASHED`.
+  - A bad file (normal error) is not retried, since it would fail the same way every time. Unexpected errors fail the quote too, so nothing stays stuck in `processing`.
+  - Why retry at all: a crash can be a one-off (for example, running out of memory on a busy machine) and cannot be told apart from a bad file.
+  - Note: the owner asked for the counter with a maximum of 3 retries.
+- **Stale-job recovery** — Built
+  - A job stuck in `processing` for more than 5 minutes (worker died) is recovered by the same counter: re-queued if attempts remain, otherwise `failed` (`JOB_ABANDONED`), so a job that keeps killing its worker cannot loop forever. Checked on worker start and every 60 s.
+  - The 5-minute limit is above the 120 s analysis timeout so a live job is never taken away.
 
 ## 5. Database (MongoDB)
 
 - **MongoDB via PyMongo's async client (`AsyncMongoClient`), not Motor** — Built (connection only)
   - One `quotes` collection, indexes created at startup, no migrations.
   - Origin: PRD preference for MongoDB.
+- **Indexes: `created_at` descending, and `(status, created_at)`** — Built
+  - The compound index also serves plain status filters and the worker's "oldest queued" lookup, so a separate `status` index (listed in the PRD) is not needed.
+  - Created at startup; no migrations.
+- **Repository tests run against a real MongoDB and skip when it is not running** — Built
+  - Why: the atomic job claim can only be proven on the real database. Start it with `docker compose up -d mongo`.
+  - Alternatives: `mongomock` (runs anywhere, but a fake cannot prove atomicity); both.
+  - Note: chosen by the owner.
 - **Uploads stored outside any web root; the database stores path and SHA-256** — Decided
   - Origin: PRD security requirement.
 
