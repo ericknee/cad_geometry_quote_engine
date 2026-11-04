@@ -55,39 +55,52 @@ Status: **Built** (in the code), **Decided** (agreed, not built yet).
   - Limits: ignores angled faces and holes; ties for thinnest pick the first axis; the bracket's value is not checked against a real shop.
   - PRD: lists setup estimation under future improvements; this is a simple first version.
 
-## 2. Quote calculation (`backend/pricing`) — Decided, not built
+## 2. Quote calculation (`backend/pricing`) — Built
 
-- **Pure package, input is `GeometryResult`** — Decided
+- **Pure package, input is `GeometryResult`** — Built
   - No web or DB. `price(geometry, quantity, config)`; all constants in one config object with a `pricing_version`.
   - Alternative: a separate small input type (more decoupled, but a second type and a mapping layer).
   - Note: the owner chose the direct type because it is simpler and fully typed.
-- **Material priced on stock volume, not part volume** — Decided
+- **Config is a frozen Pydantic model** — Built
+  - One object holds every constant; it validates the discount and complexity-band tables (start at the right value, ascend, rates between 0 and 1).
+  - Alternative: a plain dataclass (lighter, no validation).
+  - Note: chosen by the owner for consistency with the geometry result types.
+- **Cost breakdown is nested by group, with `cost_order` on every group** — Built
+  - Groups: material, machine, setup, discount, plus totals. The backend supplies both the per-unit and per-order columns, so the frontend only displays them and all math is in one tested place.
+  - Alternative: only setup carries `cost_order` and the frontend multiplies (smaller data, but math in two places and possible mismatches).
+  - Note: the owner approved the field names and chose per-order values on every group.
+- **Rounding: compute unrounded, round once at output** — Built
+  - A displayed line can differ from its displayed total by a cent, and a rounded unit value times quantity can differ from the order value by up to half a cent per part. To be noted in the README.
+  - Alternative: round each line and add the rounded lines (columns add up exactly, but deviates from the PRD rule).
+  - Note: the owner chose sum-then-round.
+- **Material priced on stock volume, not part volume** — Built
   - Why: shops buy and cut raw stock, so removed material is paid for too. The challenge requires this to be explained in the README and report.
   - Origin: PRD.
-- **$10 minimum material charge** — Decided
+- **$10 minimum material charge** — Built
   - The gear's computed material cost is about $0.20; the minimum reflects minimum stock purchases and saw cuts. The breakdown reports the computed value and whether the minimum applied.
   - Origin: PRD.
-- **Quantity discount applied only at totals** — Decided
+- **Quantity discount applied only at totals** — Built
   - `discount_unit = machine_cost_unit × rate`. Machine minutes are never reduced, so lead time uses full hours. The discount is its own line.
   - Tiers: 1-5 0%, 6-20 10%, 21-100 20%, 101+ 30%. Qty 100 is in the 20% tier (the source overlapped at 100).
   - Origin: PRD.
-- **Starting constants (placeholders, tuned later)** — Decided
+- **Starting constants (placeholders, tuned later)** — Built
   - Roughing 1.0 cm³/min, finishing 1.0 cm²/min, 2 min per hole, 3 min handling, $100/h.
-  - By hand (not run), these give about $203 for the gear at qty 1, inside the $150-240 target. They are not fitted to data.
+  - Gear result: $204.38 at qty 1, $72.94 at qty 10, $54.90 at qty 100 (competitors charge ~$190-196 at qty 1; their qty 10 and 100 prices are not available). Not fitted to data.
   - Note: the owner accepted these as a starting point and chose to keep the finishing rate at 1.0 for now.
-- **Setup hours scale with estimated setups** — Decided
+- **Setup hours scale with estimated setups** — Built
   - `setup_hours = base × (1 + 0.25 × (setups − 1))`; base chosen at calibration so the gear (2 setups) is about 1.4 h.
   - Note: the owner accepted this formula for now.
-- **Complexity placeholder 1.0** — Decided
+- **Complexity placeholder 1.0** — Built
   - Pricing reads `features.complexity_score` and falls back to a config default of 1.0, so the real score drops in later with no pricing change.
   - Note: the owner chose this over designing the score now, so the endpoints are not delayed.
 - **Calibration on charged prices** — Decided
   - Competitor 1 shows ~23.8% off a struck-through list price. Calibration uses what the customer pays ($196.43, $189.41), not list. Qty 10 and 100 data are still missing.
   - Origin: PRD.
 
-## 3. Lead time — Decided, not built
+## 3. Lead time — Built
 
-- **Business days = 5 + ceil(machine hours / 8) + complexity buffer (0/1/2)**
+- **Business days = 5 + ceil(machine hours / 8) + complexity buffer (0/1/2)** — Built
+  - Separate result object (`LeadTime`), kept apart from the cost breakdown. Gear: 6 days at qty 1 and 10, 12 days at qty 100.
   - Machine hours = setup hours + undiscounted cycle hours × quantity.
   - The complexity buffer depends on the complexity score, so it is 0 until that exists.
   - Origin: PRD.
