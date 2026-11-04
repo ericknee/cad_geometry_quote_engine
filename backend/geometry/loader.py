@@ -5,6 +5,7 @@ from pathlib import Path
 
 from OCP.BRepCheck import BRepCheck_Analyzer
 from OCP.IFSelect import IFSelect_ReturnStatus
+from OCP.Message import Message, Message_PrinterOStream
 from OCP.STEPControl import STEPControl_Reader
 from OCP.TopAbs import TopAbs_SOLID
 from OCP.TopoDS import TopoDS_Shape
@@ -14,6 +15,11 @@ from geometry.topology import unique_subshapes
 from geometry.units import detect_source_units
 
 SUPPORTED_EXTENSIONS = (".step", ".stp")
+
+# Silence the kernel's message printer. It writes parse errors to stdout (not stderr), which
+# would put a stray line before the CLI's JSON. Tradeoff: we lose the kernel's line-level
+# detail; GeometryError still reports the failure.
+Message.DefaultMessenger_s().RemovePrinters(Message_PrinterOStream.get_type_descriptor_s())
 
 
 @dataclass(frozen=True)
