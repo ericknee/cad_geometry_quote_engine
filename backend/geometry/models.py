@@ -21,6 +21,8 @@ class Features(_Frozen):
     edge_count: int = Field(ge=0)
     cylindrical_faces: int = Field(ge=0)
     holes_detected: int = Field(ge=0)
+    # Estimated clamping count on a 3-axis machine (see geometry/setups.py).
+    setups: int = Field(ge=1)
     sa_to_volume_ratio: float = Field(ge=0)
     material_removal_ratio: float = Field(ge=0, le=1)
     # Not computed yet: to be added once CNC machining costs are known.

@@ -25,6 +25,24 @@ services:
     volumes:
       - uploads:/data/uploads
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: ["python", "-m", "api.worker"]
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    environment:
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB: ${MONGODB_DB:-vendra}
+      UPLOAD_DIR: /data/uploads
+      MAX_JOB_RETRIES: ${MAX_JOB_RETRIES:-3}
+      ANALYSIS_TIMEOUT_SECONDS: ${ANALYSIS_TIMEOUT_SECONDS:-120}
+      STALE_JOB_MINUTES: ${STALE_JOB_MINUTES:-5}
+    volumes:
+      - uploads:/data/uploads
+
   web:
     build:
       context: ./web

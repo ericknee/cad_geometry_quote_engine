@@ -24,11 +24,17 @@ class SolidMeasures:
     surface_area_cm2: float
 
 
-def measure_solid(solid: TopoDS_Shape) -> SolidMeasures:
+def bounding_corners(solid: TopoDS_Shape) -> tuple[Point, Point]:
+    """Opposite corners of the tight axis-aligned box around the solid."""
     # AddOptimal gives the tight box. The default adds padding and would overstate the size.
     box = Bnd_Box()
     BRepBndLib.AddOptimal_s(solid, box, False, False)
     low, high = box.CornerMin(), box.CornerMax()
+    return (low.X(), low.Y(), low.Z()), (high.X(), high.Y(), high.Z())
+
+
+def measure_solid(solid: TopoDS_Shape) -> SolidMeasures:
+    low, high = bounding_corners(solid)
 
     volume = GProp_GProps()
     BRepGProp.VolumeProperties_s(solid, volume)
@@ -36,8 +42,8 @@ def measure_solid(solid: TopoDS_Shape) -> SolidMeasures:
     BRepGProp.SurfaceProperties_s(solid, area)
 
     return SolidMeasures(
-        min_corner_mm=(low.X(), low.Y(), low.Z()),
-        max_corner_mm=(high.X(), high.Y(), high.Z()),
+        min_corner_mm=low,
+        max_corner_mm=high,
         # abs(): a solid with reversed orientation reports negative volume.
         volume_cm3=abs(volume.Mass()) / 1000,  # mm³ -> cm³
         surface_area_cm2=area.Mass() / 100,  # mm² -> cm²

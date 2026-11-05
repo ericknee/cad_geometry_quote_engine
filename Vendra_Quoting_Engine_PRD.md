@@ -33,6 +33,7 @@ Engineers sourcing custom parts often wait days for manual quotes. An instant qu
 6. Make the pricing model transparent and roughly calibrated against competitor quotes.
 7. Deliver a clear, usable, polished-feeling UI.
 8. Make it trivial to run locally (README; Docker Compose as a bonus).
+9. Record why each significant decision was made, including decisions proposed by AI tools, so the evaluator can follow the reasoning.
 
 ### 3.2 Non-Goals
 
@@ -57,7 +58,7 @@ Authentication, payments, multi-user permissions, production deployment, a full 
 | US-5 | Reviewer | see a list of past quotes | I can track RFQ volume and history |
 | US-6 | Reviewer | open any past quote and see its full breakdown | I can review it in detail |
 | US-7 | Reviewer | change a quote's status (new / quoted / reviewed / archived) | I can manage the pipeline |
-| US-8 | Developer | run `analyze_geometry <file.step>` from a terminal | I can verify geometry independently of the app |
+| US-8 | Developer | run `python analyze_geometry.py <file.step>` from a terminal | I can verify geometry independently of the app |
 | US-9 | Engineer | get a clear error for invalid or unreadable files | I know what to fix |
 
 ## 6. Product Flow
@@ -158,7 +159,15 @@ stock_volume_cm3   = (L + 2a)(W + 2a)(H + 2a) / 1000
 material_cost_unit = stock_volume_cm3 × 2.7 g/cm³ / 1000 × $5.00/kg
 ```
 
-A minimum material charge (e.g., $5) may be applied to reflect real-world minimum stock purchases and saw cuts; this must be documented.
+A **$10 minimum material charge** applies per unit to reflect real-world minimum stock purchases, saw cuts, and material handling:
+
+```
+material_cost_unit = max(computed_material_cost_unit, $10.00)
+```
+
+The breakdown reports both the computed value and whether the minimum was applied.
+
+**Documentation requirement:** The challenge requires an explanation whenever stock volume is used instead of part volume. The README and report must state why stock volume was chosen (shops buy and cut raw stock, so the removed material is paid for too), the allowance used, and the rationale for the $10 minimum.
 
 **FR-P2. Machine time.**
 
@@ -171,18 +180,20 @@ handling_minutes     = per-part load/unload/flip constant
 cycle_minutes        = (roughing + finishing + hole + handling) × complexity_score
 ```
 
-**FR-P3. Quantity discounts** (applied to per-unit machine time):
+```
+machine_cost_unit = cycle_minutes / 60 × $100/hr      (undiscounted)
+```
 
-| Quantity | Machine-time reduction |
+**FR-P3. Quantity discounts.** The discount rate is taken from the per-unit machine cost, but it is applied **only at the total price calculation** (FR-P5). Machine time itself is never reduced, so lead time and all other time-based figures use undiscounted hours.
+
+| Quantity | Discount on per-unit machine cost |
 |---|---|
 | 1–5 | 0% |
 | 6–20 | 10% |
 | 21–100 | 20% |
 | 101+ | 30% |
 
-```
-machine_cost_unit = cycle_minutes / 60 × (1 − discount) × $100/hr
-```
+The source lists "21 to 100" and "100+", which overlap at 100. This PRD resolves the overlap by placing qty 100 in the 20% tier.
 
 **FR-P4. Setup cost.** Fixed setup hours (CAM programming, fixturing, first-article), scaled modestly by complexity and number of setups, amortized over quantity:
 
@@ -194,13 +205,16 @@ setup_cost_unit    = setup_hours × $100 / quantity
 **FR-P5. Totals.**
 
 ```
-total_cost_per_unit = material_cost_unit + machine_cost_unit + setup_cost_unit
-total_order_cost    = total_cost_per_unit × quantity
+quantity_discount_unit = machine_cost_unit × discount_rate
+total_cost_per_unit    = material_cost_unit + machine_cost_unit + setup_cost_unit − quantity_discount_unit
+total_order_cost       = total_cost_per_unit × quantity
 ```
+
+The breakdown shows the quantity discount as its own line, so the undiscounted machine cost stays visible.
 
 All money values are rounded to cents only at output time.
 
-**FR-P6. Explainability.** The breakdown response includes intermediate values (stock volume, removed volume, cycle minutes, discount applied, setup hours) so the UI and README can explain every number.
+**FR-P6. Explainability.** The breakdown response includes intermediate values (stock volume, removed volume, computed material cost and whether the $10 minimum applied, undiscounted cycle minutes, discount rate and amount, setup hours) so the UI and README can explain every number.
 
 ### 7.3 Lead Time Model
 
@@ -213,7 +227,7 @@ lead_time_days = min_lead_time
 | Term | Definition |
 |---|---|
 | `min_lead_time` | 5 business days (queue, material, QA, shipping prep). |
-| `total_machine_hours` | setup hours + cycle hours × quantity (after discount). |
+| `total_machine_hours` | setup hours + cycle hours × quantity, using **undiscounted** cycle hours. Discounts are pricing only and never shorten lead time. |
 | `productive_hours_per_day` | e.g., 8 hours on one machine. |
 | `complexity_buffer` | 0 / 1 / 2 days by complexity score band. |
 
@@ -261,7 +275,7 @@ MongoDB (preferred) with a single `quotes` collection.
 | `material` | string | `"6061 Aluminum"` |
 | `geometry` | object | Bounding box, volume, surface area, stock volume |
 | `features` | object | Face/edge counts, holes, ratios, complexity score |
-| `cost_breakdown` | object | Per-unit material, machine, setup, total per unit, total order, plus intermediates |
+| `cost_breakdown` | object | Per-unit material, machine (undiscounted), setup, quantity discount, total per unit, total order, plus intermediates |
 | `lead_time_days` | int | |
 | `status` | enum | `new`, `quoted`, `reviewed`, `archived` |
 | `pricing_version` | string | Version of pricing config used, so old quotes remain explainable |
@@ -286,7 +300,7 @@ Indexes: `created_at` (desc), `status`.
 |---|---|
 | Header | File name, quantity, material, status, created date |
 | Headline price | Per-unit cost, total order cost, lead time (business days) |
-| Cost breakdown | Material cost, machine time cost, setup cost (per unit and per order), discount applied |
+| Cost breakdown | Material cost (flag when the $10 minimum applies), machine time cost, setup cost, quantity discount as its own line (per unit and per order) |
 | Geometry | Bounding box L × W × H (mm, with inches toggle), volume, surface area |
 | Complexity | Complexity score, holes detected, face count, edge count, SA:V ratio |
 
@@ -296,6 +310,12 @@ Indexes: `created_at` (desc), `status`.
 
 **Stretch:** in-browser 3D preview of the part (backend exports the STEP tessellation to GLB/STL; frontend renders with three.js / react-three-fiber); live re-pricing when quantity changes on the result page; a quantity-vs-unit-price curve (1, 10, 100).
 
+### 7.7 Decision Log
+
+The evaluator explicitly wants to understand the approach and why decisions were made (or why AI-suggested decisions were accepted). The repo must include a decision log (`DECISIONS.md`, or a section of the README) with one entry per significant decision.
+
+Each entry records the decision, the alternatives considered, the reasoning, and whether it originated from an AI tool and why it was accepted or changed. At minimum, cover the geometry library, backend framework, database, stock volume vs. part volume, the $10 material minimum, the discount being applied only at totals, the qty 100 tier resolution, complexity score weights, and the calibration target (charged vs. list price).
+
 ## 8. Pricing Calibration
 
 ### 8.1 Competitor Reference Data
@@ -304,20 +324,22 @@ Sample part: `challenge-gear.STEP` (a small spur gear with a hub).
 
 Competitor 1 reports the part as **23.37 × 22.56 × 12.32 mm**, volume **1,952.23 mm³ (≈1.95 cm³)**, 0 threads/tapped holes, ±0.005" tolerance, 125 µin Ra finish, standard inspection.
 
-| Source | Qty | Option | Lead time | Price each |
-|---|---|---|---|---|
-| Competitor 1 | 1 | Made in USA, Expedite | 3 business days | $359.29 |
-| Competitor 1 | 1 | Made in USA, Standard | 4 business days | $196.43 |
-| Competitor 1 | 1 | Made in USA, Economy | 7 business days | $160.49 |
-| Competitor 1 | 1 | Made Internationally, Economy | 7 business days | $97.26 |
-| Competitor 2 | 1 | 6061 (T6/T651/T6511), as machined | — | $189.41 |
-| Both | 10 | — | — | Provided separately (not in document) |
-| Both | 100 | — | — | Provided separately (not in document) |
+| Source | Qty | Option | Lead time | Price each (charged) | List price (struck through) |
+|---|---|---|---|---|---|
+| Competitor 1 | 1 | Made in USA, Expedite | 3 business days | $359.29 | $471.57 |
+| Competitor 1 | 1 | Made in USA, Standard (selected) | 4 business days | $196.43 | $257.81 |
+| Competitor 1 | 1 | Made in USA, Economy | 7 business days | $160.49 | $210.65 |
+| Competitor 1 | 1 | Made Internationally, Economy | 7 business days | $97.26 | $127.66 |
+| Competitor 2 | 1 | 6061 (T6/T651/T6511), as machined | — | $189.41 | — |
+| Both | 10 | — | — | Provided separately (not in document) | — |
+| Both | 100 | — | — | Provided separately (not in document) | — |
+
+Every Competitor 1 price is shown as a discount of about 23.8% off a struck-through list price. **Calibration uses the charged (discounted) prices**, since that is what the customer actually pays and it agrees closely with Competitor 2 ($196.43 vs. $189.41). List prices are recorded for reference only.
 
 ### 8.2 Calibration Insights
 
-1. **Material is negligible for this part.** Even using stock with a 3 mm allowance per side (≈29 × 29 × 18 mm ≈ 15 cm³ ≈ 41 g), material cost is roughly $0.20 at $5/kg. Price is almost entirely setup plus machine time.
-2. **US standard target of ~$190–$196 at qty 1 implies ~1.9 hours of billed shop time at $100/hr.** A plausible split is ~1.25–1.5 hours of setup/programming plus ~0.4–0.6 hours of cycle time for a gear profile with a bore.
+1. **Material is negligible for this part.** Even using stock with a 3 mm allowance per side (≈29 × 29 × 18 mm ≈ 15 cm³ ≈ 41 g), computed material cost is roughly $0.20 at $5/kg, so the $10 minimum charge (FR-P1) applies. Even at $10, price is almost entirely setup plus machine time.
+2. **US standard target of ~$190–$196 at qty 1, minus the $10 material minimum, implies ~1.8 hours of billed shop time at $100/hr.** A plausible split is ~1.25–1.5 hours of setup/programming plus ~0.3–0.5 hours of cycle time for a gear profile with a bore.
 3. **Implication for quantity scaling:** with setup dominating, unit price should drop steeply from qty 1 to qty 10 and flatten toward cycle-time cost by qty 100. The qty 10 and qty 100 competitor numbers, once obtained, are the best check on the setup-vs-cycle split.
 4. **Lead time:** the 5-business-day minimum in the challenge sits between the competitor's Standard (4) and Economy (7) tiers, which is reasonable.
 5. **Gear teeth are the main complexity driver.** Many small faces and a high SA:V ratio should push the complexity score up; this is where feature weights should be tuned.
@@ -329,7 +351,7 @@ Competitor 1 reports the part as **23.37 × 22.56 × 12.32 mm**, volume **1,952.
 3. Compare qty 1/10/100 outputs to competitor quotes; tune setup hours first (dominates qty 1), then cycle time (dominates qty 100).
 4. Document final constants and the residual error per data point in the README.
 
-**Target:** qty 1 price within ±25% of the US Standard / Competitor 2 band (~$150–$240).
+**Target:** qty 1 price within ±25% of the charged US Standard / Competitor 2 band (~$150–$240). Competitor 1 list prices are not calibration targets.
 
 ## 9. Non-Functional Requirements
 
@@ -367,6 +389,7 @@ Competitor 1 reports the part as **23.37 × 22.56 × 12.32 mm**, volume **1,952.
 docker-compose.yml
 README.md
 REPORT.md
+DECISIONS.md
 ```
 
 ## 11. Delivery Plan (3 Days)
@@ -375,7 +398,7 @@ REPORT.md
 |---|---|---|
 | **Day 1** | Geometry engine + CLI | CLI outputs correct bbox/volume/area on sample gear (matches competitor's reported 23.37 × 22.56 × 12.32 mm and 1.95 cm³); face/edge/cylinder/hole detection; unit tests on simple solids. |
 | **Day 2** | Pricing, lead time, API, DB | Pricing module with config and tests; calibrated against qty 1 competitor data; all 4 endpoints working with MongoDB; Docker Compose for API + Mongo. |
-| **Day 3** | Frontend + docs | Upload → quote → dashboard flow end to end; status editing; polish states; README and short report; final calibration notes; stretch items if time allows. |
+| **Day 3** | Frontend + docs | Upload → quote → dashboard flow end to end; status editing; polish states; README, short report, and decision log; final calibration notes; stretch items if time allows. |
 
 **Prioritization rule:** if time runs short, protect in order: (1) standalone engine correctness, (2) end-to-end quote flow, (3) README/report, (4) UI polish, (5) stretch features.
 
@@ -389,17 +412,19 @@ REPORT.md
 6. Status can be changed from the dashboard and the change persists.
 7. Per-unit price decreases as quantity increases, reflecting setup amortization and discount tiers.
 8. Invalid uploads (wrong extension, corrupt file, quantity 0) produce clear errors.
-9. README covers install, run (frontend, backend, DB, CLI), example flow, example output, assumptions, and limitations.
-10. Report (1–2 pages) covers parsing, geometry, complexity, pricing, lead time, assumptions, and future improvements.
+9. README covers what the app does, install, run (frontend, backend, DB, CLI), example flow, example output, assumptions, and limitations.
+10. Report (1–2 pages) covers parsing, geometry, complexity, pricing, lead time, assumptions, and future improvements, and explains why stock volume is used instead of part volume.
+11. A decision log (§7.7) explains the reasoning behind each significant decision, including AI-suggested ones.
 
 ## 13. Deliverables
 
 1. GitHub repository with frontend, backend, geometry engine, pricing logic, and DB schema.
 2. Standalone geometry CLI entry point.
 3. README (sections listed in Acceptance Criterion 9).
-4. Short report (in README or `REPORT.md`).
-5. Optional Docker setup.
-6. If incomplete: a note on what works, what is missing, and next steps.
+4. Short report (in README or `REPORT.md`), including the stock-volume justification.
+5. Decision log (`DECISIONS.md` or README section; see §7.7).
+6. Optional Docker setup.
+7. If incomplete: a note on what works, what is missing, and next steps.
 
 ## 14. Risks and Mitigations
 

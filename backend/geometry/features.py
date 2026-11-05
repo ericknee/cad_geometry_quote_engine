@@ -7,7 +7,8 @@ from OCP.GeomAbs import GeomAbs_Cylinder
 from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE
 from OCP.TopoDS import TopoDS, TopoDS_Shape
 
-from geometry.holes import count_holes
+from geometry.holes import find_hole_axes
+from geometry.setups import count_setups
 from geometry.topology import unique_subshapes
 
 
@@ -17,17 +18,20 @@ class SolidFeatures:
     edge_count: int
     cylindrical_faces: int
     holes_detected: int
+    setups: int
 
 
 def extract_features(solid: TopoDS_Shape) -> SolidFeatures:
     faces = [TopoDS.Face(f) for f in unique_subshapes(solid, TopAbs_FACE)]
     adaptors = [(f, BRepAdaptor_Surface(f)) for f in faces]
     cylinders = [(f, a) for f, a in adaptors if a.GetType() == GeomAbs_Cylinder]
+    hole_axes = find_hole_axes(solid, cylinders)
     return SolidFeatures(
         face_count=len(faces),
         edge_count=len(unique_subshapes(solid, TopAbs_EDGE)),
         cylindrical_faces=len(cylinders),
-        holes_detected=count_holes(solid, cylinders),
+        holes_detected=len(hole_axes),
+        setups=count_setups(solid, hole_axes),
     )
 
 
@@ -38,6 +42,7 @@ def merge_features(parts: list[SolidFeatures]) -> SolidFeatures:
         edge_count=sum(p.edge_count for p in parts),
         cylindrical_faces=sum(p.cylindrical_faces for p in parts),
         holes_detected=sum(p.holes_detected for p in parts),
+        setups=sum(p.setups for p in parts),
     )
 
 
