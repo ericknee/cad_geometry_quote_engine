@@ -139,7 +139,9 @@ Status: **Built** (in the code), **Decided** (agreed, not built yet).
 - **Status changes are compare-and-set** — Built
   - The update only applies if the quote still has the status that was read, so a reviewer and the worker cannot overwrite each other. A lost race returns 409 (`STATUS_CONFLICT`).
 - **Atomic job claim** — Built
-  - The worker takes the oldest `queued` quote and marks it `processing` in one database operation, so two workers can never get the same job. Verified with 25 simultaneous claims against 10 quotes.
+  - The worker takes the quote that has waited longest (by `updated_at`) and marks it `processing` in one database operation, so two workers can never get the same job. Verified with 25 simultaneous claims against 10 quotes.
+  - Ordering by `updated_at` (equal to `created_at` for a new quote) sends a quote released for retry to the back of the queue, so a file that keeps crashing cannot block the ones behind it. Cost: strict first-in-first-out is lost for retried quotes.
+  - Results and retries are written only under the claim that made them (`attempts` must still match), so a stalled worker cannot overwrite or re-queue a job another worker has since claimed. A refused write is logged.
 - **Each analysis runs in a child process** — Built
   - The worker runs the existing CLI (`python -m geometry <file>`) per job. Exit code 0 is a result, 1 is a normal error (bad file); anything else, an unreadable output or a timeout (120 s) counts as a crash.
   - Why: a hard crash in the C++ kernel cannot be caught in Python and would kill the worker. In a child process only that job is affected.

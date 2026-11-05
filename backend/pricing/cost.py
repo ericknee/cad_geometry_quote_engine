@@ -113,7 +113,7 @@ def price(
         material=MaterialCost(
             stock_volume_cm3=_amount(geometry.stock_volume_cm3),
             part_volume_cm3=_amount(geometry.volume_cm3),
-            removed_volume_cm3=_amount(geometry.stock_volume_cm3 - geometry.volume_cm3),
+            removed_volume_cm3=_amount(max(0.0, geometry.stock_volume_cm3 - geometry.volume_cm3)),
             computed_cost_unit=_money(computed_material),
             minimum_charge=_money(config.min_material_charge),
             minimum_applied=computed_material < config.min_material_charge,

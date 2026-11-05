@@ -9,6 +9,7 @@ async def ensure_indexes(db: AsyncDatabase) -> None:
     quotes = db[COLLECTION]
     # Dashboard: newest first.
     await quotes.create_index([("created_at", DESCENDING)])
-    # Status filter, and the worker's "oldest queued" lookup. Its prefix also serves
-    # plain status filters, so no separate status-only index is needed.
+    # Status filter with newest-first listing. Its prefix also serves plain status filters.
     await quotes.create_index([("status", ASCENDING), ("created_at", ASCENDING)])
+    # The worker's "longest waiting queued quote" lookup.
+    await quotes.create_index([("status", ASCENDING), ("updated_at", ASCENDING)])

@@ -54,6 +54,7 @@ class QuotesService:
         if quote is None:
             return False
         quote_id = quote["id"]
+        attempt = quote["attempts"]
         try:
             geometry = await self._analyze(
                 Path(quote["file_path"]), self._settings.analysis_timeout_seconds
@@ -61,19 +62,36 @@ class QuotesService:
             cost = price(geometry, quote["quantity"], self._pricing)
             lead = lead_time(geometry, quote["quantity"], self._pricing)
         except AnalysisFailed as error:
-            await self._repo.save_failure(
-                quote_id, ErrorDetail(code=error.code, message=error.message)
+            self._log_if_lost(
+                quote_id,
+                await self._repo.save_failure(
+                    quote_id, ErrorDetail(code=error.code, message=error.message), attempt=attempt
+                ),
             )
         except AnalysisCrashed as error:
             await self._handle_crash(quote, error)
         except Exception as error:  # Anything unexpected still ends the job cleanly.
             logger.exception("Unexpected error while processing quote %s", quote_id)
-            await self._repo.save_failure(
-                quote_id, ErrorDetail(code=INTERNAL, message=f"{type(error).__name__}: {error}")
+            self._log_if_lost(
+                quote_id,
+                await self._repo.save_failure(
+                    quote_id,
+                    ErrorDetail(code=INTERNAL, message=f"{type(error).__name__}: {error}"),
+                    attempt=attempt,
+                ),
             )
         else:
-            await self._repo.save_result(quote_id, geometry, cost, lead)
+            self._log_if_lost(
+                quote_id,
+                await self._repo.save_result(quote_id, geometry, cost, lead, attempt=attempt),
+            )
         return True
+
+    @staticmethod
+    def _log_if_lost(quote_id: str, saved: Document | None) -> None:
+        """Log a write that was refused because the job is no longer ours."""
+        if saved is None:
+            logger.warning("Quote %s: result discarded, the job was taken over meanwhile", quote_id)
 
     async def _handle_crash(self, quote: Document, error: AnalysisCrashed) -> None:
         attempts = quote["attempts"]
@@ -85,15 +103,17 @@ class QuotesService:
                 self._max_attempts,
                 error,
             )
-            await self._repo.release_for_retry(quote["id"])
-            return
-        await self._repo.save_failure(
-            quote["id"],
-            ErrorDetail(
-                code=CRASHED,
-                message=f"The file could not be analyzed after {attempts} attempts. {error}",
-            ),
-        )
+            saved = await self._repo.release_for_retry(quote["id"], attempt=attempts)
+        else:
+            saved = await self._repo.save_failure(
+                quote["id"],
+                ErrorDetail(
+                    code=CRASHED,
+                    message=f"The file could not be analyzed after {attempts} attempts. {error}",
+                ),
+                attempt=attempts,
+            )
+        self._log_if_lost(quote["id"], saved)
 
     async def recover_stale_jobs(self) -> tuple[int, int]:
         """Recover jobs whose worker died. Returns (requeued, failed)."""

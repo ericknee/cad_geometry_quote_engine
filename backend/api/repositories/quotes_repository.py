@@ -98,8 +98,11 @@ class QuotesRepository:
         return _to_document(raw)
 
     async def claim_next_queued(self) -> Document | None:
-        """Take the oldest queued quote and mark it processing, in one atomic step so two
-        workers can never get the same one. Each claim counts as one attempt."""
+        """Take the quote that has waited longest in the queue and mark it processing, in one
+        atomic step so two workers can never get the same one. Each claim counts as one attempt.
+
+        Ordered by `updated_at` (equal to `created_at` for a new quote), so a quote released for
+        retry goes to the back of the line instead of blocking the ones behind it."""
         now = _now()
         raw = await self._quotes.find_one_and_update(
             {"status": QuoteStatus.QUEUED.value},
@@ -111,7 +114,7 @@ class QuotesRepository:
                 },
                 "$inc": {"attempts": 1},
             },
-            sort=[("created_at", ASCENDING), ("_id", ASCENDING)],
+            sort=[("updated_at", ASCENDING), ("_id", ASCENDING)],
             return_document=ReturnDocument.AFTER,
         )
         return _to_document(raw)
@@ -122,10 +125,14 @@ class QuotesRepository:
         geometry: GeometryResult,
         cost_breakdown: CostBreakdown,
         lead_time: LeadTime,
+        *,
+        attempt: int,
     ) -> Document | None:
-        """Store a finished quote. Only applies while the quote is still processing."""
+        """Store a finished quote. Only applies while the quote is still processing under the
+        claim numbered `attempt` (a later claim by another worker is left alone)."""
         return await self._finish_job(
             quote_id,
+            attempt,
             {
                 "status": QuoteStatus.QUOTED.value,
                 "geometry": geometry.model_dump(),
@@ -136,18 +143,21 @@ class QuotesRepository:
             },
         )
 
-    async def save_failure(self, quote_id: str, error: ErrorDetail) -> Document | None:
+    async def save_failure(
+        self, quote_id: str, error: ErrorDetail, *, attempt: int
+    ) -> Document | None:
         return await self._finish_job(
-            quote_id, {"status": QuoteStatus.FAILED.value, "error": error.model_dump()}
+            quote_id, attempt, {"status": QuoteStatus.FAILED.value, "error": error.model_dump()}
         )
 
-    async def release_for_retry(self, quote_id: str) -> Document | None:
-        """Put a processing quote back in the queue (its attempts so far are kept)."""
+    async def release_for_retry(self, quote_id: str, *, attempt: int) -> Document | None:
+        """Put a processing quote back in the queue (its attempts so far are kept). Only applies
+        under the claim numbered `attempt`."""
         oid = _object_id(quote_id)
         if oid is None:
             return None
         raw = await self._quotes.find_one_and_update(
-            {"_id": oid, "status": QuoteStatus.PROCESSING.value},
+            {"_id": oid, "status": QuoteStatus.PROCESSING.value, "attempts": attempt},
             {
                 "$set": {
                     "status": QuoteStatus.QUEUED.value,
@@ -183,12 +193,12 @@ class QuotesRepository:
         )
         return requeued.modified_count, failed.modified_count
 
-    async def _finish_job(self, quote_id: str, fields: Document) -> Document | None:
+    async def _finish_job(self, quote_id: str, attempt: int, fields: Document) -> Document | None:
         oid = _object_id(quote_id)
         if oid is None:
             return None
         raw = await self._quotes.find_one_and_update(
-            {"_id": oid, "status": QuoteStatus.PROCESSING.value},
+            {"_id": oid, "status": QuoteStatus.PROCESSING.value, "attempts": attempt},
             {"$set": {**fields, "updated_at": _now()}},
             return_document=ReturnDocument.AFTER,
         )

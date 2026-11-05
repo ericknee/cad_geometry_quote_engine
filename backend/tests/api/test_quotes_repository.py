@@ -78,7 +78,7 @@ async def test_save_result_stores_everything_and_sets_quoted(repo):
     claimed = await repo.claim_next_queued()
     geometry = analyze_file("samples/vendra-gear.STEP")
     saved = await repo.save_result(
-        claimed["id"], geometry, price(geometry, 10), lead_time(geometry, 10)
+        claimed["id"], geometry, price(geometry, 10), lead_time(geometry, 10), attempt=1
     )
     assert saved["status"] == "quoted"
     assert saved["lead_time_days"] == lead_time(geometry, 10).days
@@ -91,7 +91,9 @@ async def test_save_result_ignored_unless_processing(repo):
     quote = await _insert(repo)  # still queued
     geometry = analyze_file("samples/vendra-gear.STEP")
     assert (
-        await repo.save_result(quote["id"], geometry, price(geometry, 1), lead_time(geometry, 1))
+        await repo.save_result(
+            quote["id"], geometry, price(geometry, 1), lead_time(geometry, 1), attempt=0
+        )
         is None
     )
     assert (await repo.find_by_id(quote["id"]))["status"] == "queued"
@@ -101,7 +103,7 @@ async def test_save_failure_keeps_the_reason(repo):
     await _insert(repo)
     claimed = await repo.claim_next_queued()
     failed = await repo.save_failure(
-        claimed["id"], ErrorDetail(code="UNREADABLE_STEP", message="bad")
+        claimed["id"], ErrorDetail(code="UNREADABLE_STEP", message="bad"), attempt=1
     )
     assert failed["status"] == "failed"
     assert failed["error"] == {"code": "UNREADABLE_STEP", "message": "bad"}
@@ -111,7 +113,9 @@ async def test_transition_status_is_compare_and_set(repo):
     quote = await _insert(repo)
     await repo.claim_next_queued()
     geometry = analyze_file("samples/vendra-gear.STEP")
-    await repo.save_result(quote["id"], geometry, price(geometry, 1), lead_time(geometry, 1))
+    await repo.save_result(
+        quote["id"], geometry, price(geometry, 1), lead_time(geometry, 1), attempt=1
+    )
 
     reviewed = await repo.transition_status(quote["id"], QuoteStatus.QUOTED, QuoteStatus.REVIEWED)
     assert reviewed["status"] == "reviewed"
@@ -125,14 +129,14 @@ async def test_claim_counts_attempts_and_release_keeps_them(repo):
     quote = await _insert(repo)
     assert quote["attempts"] == 0
     assert (await repo.claim_next_queued())["attempts"] == 1
-    released = await repo.release_for_retry(quote["id"])
+    released = await repo.release_for_retry(quote["id"], attempt=1)
     assert (released["status"], released["started_at"]) == ("queued", None)
     assert (await repo.claim_next_queued())["attempts"] == 2
 
 
 async def test_release_for_retry_only_applies_to_processing(repo):
     quote = await _insert(repo)  # still queued
-    assert await repo.release_for_retry(quote["id"]) is None
+    assert await repo.release_for_retry(quote["id"], attempt=1) is None
 
 
 async def test_recover_stale_requeues_or_fails_by_attempts(repo, mongo_db):
@@ -171,3 +175,23 @@ async def test_indexes_exist(mongo_db):
 async def _index_names(db):
     for index in await (await db["quotes"].list_indexes()).to_list():
         yield index["name"]
+
+
+async def test_writes_from_an_older_claim_are_refused(repo):
+    quote = await _insert(repo)
+    await repo.claim_next_queued()  # attempt 1 (worker A)
+    await repo.release_for_retry(quote["id"], attempt=1)
+    await repo.claim_next_queued()  # attempt 2 (worker B)
+    stale = ErrorDetail(code="X", message="late")
+    assert await repo.release_for_retry(quote["id"], attempt=1) is None
+    assert await repo.save_failure(quote["id"], stale, attempt=1) is None
+    assert (await repo.find_by_id(quote["id"]))["status"] == "processing"
+
+
+async def test_released_quote_goes_to_the_back_of_the_queue(repo):
+    first = await _insert(repo, "first.step")
+    second = await _insert(repo, "second.step")
+    await repo.claim_next_queued()
+    await repo.release_for_retry(first["id"], attempt=1)
+    assert (await repo.claim_next_queued())["id"] == second["id"]
+    assert (await repo.claim_next_queued())["id"] == first["id"]

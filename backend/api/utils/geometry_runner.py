@@ -31,10 +31,14 @@ async def analyze_in_subprocess(
     try:
         stdout, stderr = await asyncio.wait_for(process.communicate(), timeout_seconds)
     except TimeoutError:
-        with contextlib.suppress(ProcessLookupError):
-            process.kill()
-        await process.wait()
         raise AnalysisCrashed(f"Analysis timed out after {timeout_seconds:g} s.") from None
+    finally:
+        # Covers timeout, cancellation (e.g. Ctrl-C) and any other error: never leave the child
+        # running with nobody waiting for it.
+        if process.returncode is None:
+            with contextlib.suppress(ProcessLookupError):
+                process.kill()
+            await asyncio.shield(process.wait())
 
     if process.returncode == 0:
         try:
