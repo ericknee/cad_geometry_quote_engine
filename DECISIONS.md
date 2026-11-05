@@ -105,32 +105,48 @@ Status: **Built** (in the code), **Decided** (agreed, not built yet).
   - The complexity buffer depends on the complexity score, so it is 0 until that exists.
   - Origin: PRD.
 
-## 4. API and job queue (`backend/api`, worker) — Decided, not built
+## 4. API and job queue (`backend/api`, worker) — Built
 
-- **FastAPI, layered router → service → repository** — Built (skeleton)
+- **FastAPI, layered router → service → repository** — Built
   - Only repositories touch collections. Error shape `{ "error": { "code", "message" } }`.
   - Origin: PRD and project conventions.
-- **Async job queue with a separate worker process** — Decided
+- **Async job queue with a separate worker process** — Built
   - `POST /quotes` returns 202 and a `queued` quote; a worker claims jobs atomically from Mongo and runs geometry and pricing.
   - Alternatives: `asyncio.to_thread` (~15-20 lines, keeps the PRD's 201 response); process pool (~45-60 lines); job queue (~350-500 lines).
   - Note: the owner chose the queue after comparing these options. A separate worker means a kernel crash only stops the worker, not the API.
   - PRD deviation: the PRD specifies 201 with the full quote and lists async jobs as a stretch goal.
-- **Upfront validation returns 422; analysis failures are stored** — Decided
+- **Upfront validation returns 422; analysis failures are stored** — Built
   - Wrong extension, oversize file, bad quantity: 422, nothing saved. Corrupt STEP or no solids: the record is kept as `failed` with error code and message.
   - Note: with a queue, analysis failures are only known after the 202, so they must be stored on the quote.
-- **Statuses: `queued` → `processing` → `quoted` / `failed`, then `reviewed`, `archived`** — Decided
+- **Statuses: `queued` → `processing` → `quoted` / `failed`, then `reviewed`, `archived`** — Built
   - Note: the owner chose to rename the PRD's `new` to `queued` and add `processing` and `failed`, so each job state is explicit.
   - PRD deviation: the PRD has `new`, `quoted`, `reviewed`, `archived`.
-- **Client polls `GET /quotes/{id}` (~1 s)** — Decided
+- **Client polls `GET /quotes/{id}` (~1 s)** — Built
   - Alternatives: server-sent events (the server would still poll Mongo because the worker is a separate process, so no real speed gain, plus a proxy buffering risk); a dedicated `/job` endpoint (extra endpoint).
   - Note: the owner chose polling after comparing it with SSE.
-- **List returns `{items, total, limit, skip}`** — Decided
+- **List returns `{items, total, limit, skip}`** — Built
   - Note: the owner chose this because the dashboard needs a total for paging.
   - PRD deviation: the PRD shows a bare array.
-- **Allowed status changes by a reviewer: `quoted` → `reviewed`, any finished quote → `archived`** — Decided
-  - `queued`, `processing` and `failed` are set only by the system; a quote mid-job cannot be archived. Everything else returns 422.
+- **Allowed status changes by a reviewer: `quoted` → `reviewed`, any finished quote → `archived`** — Built
+  - `queued`, `processing` and `failed` are set only by the system; a quote mid-job cannot be archived. Everything else returns 422. A `failed` quote may be archived so it can be cleared from the dashboard.
   - Alternatives: also allow un-archiving and `reviewed` → `quoted`; or allow any user-settable status from any state (simplest, but a failed quote could be marked reviewed).
   - Note: the owner chose the stricter rule, which keeps the PRD lifecycle meaningful.
+- **Upload checks: extension, size, empty, STEP header** — Built
+  - `.step`/`.stp` (any case), at most `MAX_UPLOAD_MB`, not empty, and the first line must be `ISO-10303-21` (the header every STEP file has). Each failure is a 422 `INVALID_FILE` and nothing is saved.
+  - The file is streamed to disk in 1 MB chunks and hashed on the way, so a 50 MB file is never held in memory and an oversize upload stops early.
+  - Stored as `<UPLOAD_DIR>/<random id>.step`. The client's name is only kept for display (path parts and control characters removed), so a hostile name cannot choose where the file goes.
+  - Why the header check: a renamed `.txt` fails in milliseconds with a clear message instead of after a queue wait. It does not prove the file is valid; the geometry engine still decides that.
+  - Alternative: extension only (simpler, but the user waits for the worker to learn the file is not STEP).
+- **Duplicate uploads create a new quote each time** — Built
+  - The SHA-256 is stored, so caching analysis by hash stays possible later (a PRD stretch item). Not done now: it adds a cache-invalidation rule for little gain at this scale.
+- **Quantity range is checked in the service, not by request validation** — Built
+  - 1 to 10,000 (PRD). A bad number returns `INVALID_QUANTITY`; only a non-number returns the generic `VALIDATION_ERROR`. Keeps the rule in one place and gives the UI a specific code.
+- **One error shape for every failure** — Built
+  - Handlers turn domain errors, request-validation errors and unknown routes into `{ "error": { "code", "message" } }`. Validation errors report only the first problem, as `field: reason`.
+- **Startup checks: MongoDB ping, absolute upload folder** — Built
+  - The API pings MongoDB when it starts, so a wrong connection string stops the boot with a clear message (5 s limit) instead of failing on the first request. `/api/health` stays free of database calls.
+  - `UPLOAD_DIR` is resolved to an absolute path and created at startup. A relative path would depend on where each process was started, and the API and worker could look in different places.
+  - Known gap: if the geometry engine rejects a file, its message names the stored random filename, not the user's. Cosmetic; to fix later by passing the display name to the engine.
 - **One response model with optional result fields** — Built
   - `QuoteDetail` has `geometry`, `cost_breakdown`, `lead_time` as `None` until the quote is priced, and `error` only when it failed. The dashboard row (`QuoteSummary`) is built from it, so the two cannot drift.
   - Alternative: a separate model per status (stricter, but more types and a harder API schema).
@@ -164,7 +180,7 @@ Status: **Built** (in the code), **Decided** (agreed, not built yet).
 
 ## 5. Database (MongoDB)
 
-- **MongoDB via PyMongo's async client (`AsyncMongoClient`), not Motor** — Built (connection only)
+- **MongoDB via PyMongo's async client (`AsyncMongoClient`), not Motor** — Built
   - One `quotes` collection, indexes created at startup, no migrations.
   - Origin: PRD preference for MongoDB.
 - **Indexes: `created_at` descending, and `(status, created_at)`** — Built
@@ -174,7 +190,7 @@ Status: **Built** (in the code), **Decided** (agreed, not built yet).
   - Why: the atomic job claim can only be proven on the real database. Start it with `docker compose up -d mongo`.
   - Alternatives: `mongomock` (runs anywhere, but a fake cannot prove atomicity); both.
   - Note: chosen by the owner.
-- **Uploads stored outside any web root; the database stores path and SHA-256** — Decided
+- **Uploads stored outside any web root; the database stores path and SHA-256** — Built
   - Origin: PRD security requirement.
 
 ## 6. Frontend — not started

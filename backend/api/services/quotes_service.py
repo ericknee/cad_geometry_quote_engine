@@ -9,9 +9,23 @@ from geometry.models import GeometryResult
 from pricing import PricingConfig, lead_time, price
 
 from api.config import Settings
-from api.errors.quotes_errors import AnalysisCrashed, AnalysisFailed
+from api.errors.quotes_errors import (
+    AnalysisCrashed,
+    AnalysisFailed,
+    InvalidQuantity,
+    InvalidStatusTransition,
+    QuoteNotFound,
+    StatusConflict,
+)
 from api.repositories.quotes_repository import Document, QuotesRepository
-from api.types.quotes_types import ErrorDetail
+from api.types.quotes_types import (
+    ErrorDetail,
+    QuoteDetail,
+    QuoteList,
+    QuoteStatus,
+    QuoteSummary,
+)
+from api.utils.file_storage import Upload, delete_file, save_upload
 from api.utils.geometry_runner import analyze_in_subprocess
 
 logger = logging.getLogger(__name__)
@@ -21,6 +35,17 @@ Analyzer = Callable[[Path, float], Awaitable[GeometryResult]]
 CRASHED = "ANALYSIS_CRASHED"
 ABANDONED = "JOB_ABANDONED"
 INTERNAL = "INTERNAL_ERROR"
+
+MATERIAL = "6061 Aluminum"
+MIN_QUANTITY = 1
+MAX_QUANTITY = 10_000
+
+# New status -> statuses it may be set from. Only a reviewer's choices appear here; queued,
+# processing, failed and quoted are set by the system. A quote mid-job cannot be archived.
+ALLOWED_TRANSITIONS: dict[QuoteStatus, frozenset[QuoteStatus]] = {
+    QuoteStatus.REVIEWED: frozenset({QuoteStatus.QUOTED}),
+    QuoteStatus.ARCHIVED: frozenset({QuoteStatus.QUOTED, QuoteStatus.REVIEWED, QuoteStatus.FAILED}),
+}
 
 
 class QuotesService:
@@ -35,6 +60,54 @@ class QuotesService:
         self._settings = settings
         self._pricing = pricing_config or PricingConfig()
         self._analyze = analyze  # replaceable in tests
+
+    async def create_quote(self, upload: Upload, quantity: int) -> QuoteDetail:
+        """Check the request, keep the file and queue the quote. The worker does the rest.
+        Cheap checks fail here and save nothing."""
+        if not MIN_QUANTITY <= quantity <= MAX_QUANTITY:
+            raise InvalidQuantity(f"Quantity must be between {MIN_QUANTITY} and {MAX_QUANTITY}.")
+        stored = await save_upload(
+            upload, self._settings.upload_path, self._settings.max_upload_mb * 1024 * 1024
+        )
+        try:
+            doc = await self._repo.insert_queued(
+                file_name=stored.file_name,
+                file_path=stored.file_path,
+                file_hash=stored.file_hash,
+                quantity=quantity,
+                material=MATERIAL,
+            )
+        except BaseException:
+            delete_file(stored.file_path)  # no quote points at the file, so do not keep it
+            raise
+        return QuoteDetail.model_validate(doc)
+
+    async def get_quote(self, quote_id: str) -> QuoteDetail:
+        doc = await self._repo.find_by_id(quote_id)
+        if doc is None:
+            raise QuoteNotFound("Quote not found.")
+        return QuoteDetail.model_validate(doc)
+
+    async def list_quotes(self, status: QuoteStatus | None, limit: int, skip: int) -> QuoteList:
+        docs = await self._repo.list_page(status, limit, skip)
+        items = [QuoteSummary.from_detail(QuoteDetail.model_validate(doc)) for doc in docs]
+        return QuoteList(items=items, total=await self._repo.count(status), limit=limit, skip=skip)
+
+    async def update_status(self, quote_id: str, new: QuoteStatus) -> QuoteDetail:
+        """A reviewer's status change, limited to ALLOWED_TRANSITIONS."""
+        quote = await self._repo.find_by_id(quote_id)
+        if quote is None:
+            raise QuoteNotFound("Quote not found.")
+        current = QuoteStatus(quote["status"])
+        if current not in ALLOWED_TRANSITIONS.get(new, frozenset()):
+            raise InvalidStatusTransition(f"A {current.value} quote cannot be set to {new.value}.")
+        updated = await self._repo.transition_status(quote_id, current, new)
+        if updated is None:
+            # The status moved on since we read it (e.g. a reviewer in another tab).
+            if await self._repo.find_by_id(quote_id) is None:
+                raise QuoteNotFound("Quote not found.")
+            raise StatusConflict("The quote changed while you were updating it. Reload and retry.")
+        return QuoteDetail.model_validate(updated)
 
     @property
     def _max_attempts(self) -> int:
