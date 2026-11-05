@@ -154,6 +154,11 @@ Status: **Built** (in the code), **Decided** (agreed, not built yet).
 - **Stale-job recovery** — Built
   - A job stuck in `processing` for more than 5 minutes (worker died) is recovered by the same counter: re-queued if attempts remain, otherwise `failed` (`JOB_ABANDONED`), so a job that keeps killing its worker cannot loop forever. Checked on worker start and every 60 s.
   - The 5-minute limit is above the 120 s analysis timeout so a live job is never taken away.
+- **Worker loop survives database errors, then exits** — Built
+  - An error in one loop pass (e.g. MongoDB unreachable) is logged and retried after 5, 10, then 20 s. A 4th failure in a row ends the process; any successful pass resets the count.
+  - Why: short outages need no restart, while a permanent fault (wrong URI, bug) becomes visible instead of looping silently. Docker's `restart: unless-stopped` restarts the worker.
+  - Alternatives: crash on the first error (no help for local runs); retry forever (hides permanent faults).
+  - Note: the owner chose exponential backoff with a maximum of 3 retries.
 
 ## 5. Database (MongoDB)
 
