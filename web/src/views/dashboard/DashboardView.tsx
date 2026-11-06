@@ -48,7 +48,9 @@ export default function DashboardView() {
     }
   }, [data, filters, router]);
 
-  const isDefault = filtersToQuery(filters) === filtersToQuery(DEFAULT_FILTERS);
+  // The page number doesn't count as a filter.
+  const isDefault =
+    filtersToQuery({ ...filters, page: DEFAULT_FILTERS.page }) === filtersToQuery(DEFAULT_FILTERS);
 
   return (
     <main className="space-y-5">

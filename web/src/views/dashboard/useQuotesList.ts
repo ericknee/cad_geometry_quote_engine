@@ -5,6 +5,7 @@ import { listQuotes } from "@/api/quotes";
 import { IN_PROGRESS_STATUSES, type QuoteList, type QuoteStatus } from "@/types";
 
 const REFRESH_MS = 3000;
+const MAX_BACKOFF_MS = 30000;
 
 interface Params {
   status?: QuoteStatus;
@@ -32,11 +33,13 @@ export function useQuotesList({ status, excludeArchived, sort, limit, skip }: Pa
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let failures = 0;
 
     async function load() {
       try {
         const data = await listQuotes({ status, excludeArchived, sort, limit, skip });
         if (cancelled) return;
+        failures = 0;
         setLoaded({ key, data, error: null });
         if (data.items.some((q) => IN_PROGRESS_STATUSES.includes(q.status))) {
           timer = setTimeout(load, REFRESH_MS);
@@ -45,6 +48,9 @@ export function useQuotesList({ status, excludeArchived, sort, limit, skip }: Pa
         if (cancelled) return;
         // Keep the rows we already have for this view; just report the error.
         setLoaded((prev) => ({ key, data: prev?.key === key ? prev.data : null, error }));
+        // Keep trying, backing off (3s, 6s, 12s ... up to 30s) so a down API isn't hammered.
+        timer = setTimeout(load, Math.min(REFRESH_MS * 2 ** failures, MAX_BACKOFF_MS));
+        failures += 1;
       }
     }
     load();

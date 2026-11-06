@@ -1,6 +1,6 @@
 import Link from "next/link";
 import StatusBadge from "@/components/StatusBadge";
-import { formatDate, formatMoney } from "@/format";
+import { formatDate, formatDays, formatMoney } from "@/format";
 import { routes } from "@/routes";
 import type { QuoteSummary } from "@/types";
 import RowActions from "./RowActions";
@@ -51,7 +51,7 @@ export default function QuotesTable({
                 {formatMoney(quote.total_order_cost)}
               </td>
               <td className={`${CELL} text-right tabular-nums`}>
-                {quote.lead_time_days === null ? "-" : `${quote.lead_time_days} days`}
+                {formatDays(quote.lead_time_days)}
               </td>
               <td className={`${CELL} min-w-28 text-fg-muted`}>
                 {formatDate(quote.created_at)}

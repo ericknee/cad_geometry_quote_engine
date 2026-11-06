@@ -87,7 +87,7 @@ class QuotesRepository:
         exclude_archived: bool = False,
         sort: SortOrder = SortOrder.NEWEST,
     ) -> list[Document]:
-        """One page of quotes, newest first. Slim documents: only what a QuoteSummary needs
+        """One page of quotes in the requested order (newest first by default). Slim documents: only what a QuoteSummary needs
         (see _SUMMARY_PROJECTION), so the large geometry is never sent. Use find_by_id for all."""
         # _id breaks ties (same direction) so pages stay stable when quotes share a timestamp.
         direction = DESCENDING if sort is SortOrder.NEWEST else ASCENDING
