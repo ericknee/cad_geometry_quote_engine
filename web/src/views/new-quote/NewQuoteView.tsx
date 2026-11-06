@@ -44,6 +44,19 @@ export default function NewQuoteView() {
     }
   }, [quote, router]);
 
+  // Next keeps this page's state alive while you are on another page and runs effect cleanups
+  // when it is hidden. Reset then, or coming back to "New quote" would find the finished quote
+  // and redirect straight to it again.
+  useEffect(() => {
+    return () => {
+      setQuoteId(null);
+      setFile(null);
+      setFileError(null);
+      setQuantity("1");
+      setUploadError(null);
+    };
+  }, []);
+
   // Editing the form clears the previous attempt and its error.
   function resetAttempt() {
     setQuoteId(null);

@@ -20,7 +20,7 @@ export default function CalculationDetails({
   cost: CostBreakdown;
   leadTime: LeadTime | null;
 }) {
-  const { material, machine, setup, discount } = cost;
+  const { material, machine, setup } = cost;
   const min = (n: number) => `${formatNumber(n)} min`;
 
   return (
@@ -39,34 +39,34 @@ export default function CalculationDetails({
                 ["Part volume", `${formatNumber(material.part_volume_cm3)} cm³`],
                 ["Removed volume", `${formatNumber(material.removed_volume_cm3)} cm³`],
                 ["Computed cost per unit", formatMoney(material.computed_cost_unit)],
-                ["Minimum charge", formatMoney(material.minimum_charge)],
+                ["Computed cost per order", formatMoney(material.computed_cost_order)],
+                ["Minimum charge (per order)", formatMoney(material.minimum_charge)],
                 ["Minimum applied", material.minimum_applied ? "Yes" : "No"],
               ]}
             />
           </Group>
-          <Group title="Machine time (per unit, before discount)">
+          <Group title="Machine time (per unit)">
             <DataList
               rows={[
                 ["Roughing", min(machine.roughing_minutes)],
-                ["Finishing", min(machine.finishing_minutes)],
                 ["Holes", min(machine.hole_minutes)],
-                ["Handling", min(machine.handling_minutes)],
-                ["Complexity factor used", formatNumber(machine.complexity_score)],
+                ["Edges", min(machine.edge_minutes)],
+                ["Thin walls (under 3 mm)", machine.thin_wall_count],
+                ["Roughing rate (MRR)", `${formatNumber(machine.mrr_cm3_per_min)} cm³/min`],
                 ["Cycle time", min(machine.cycle_minutes)],
               ]}
             />
           </Group>
-          <Group title="Setup and discount">
+          <Group title="Setup (one-time, shared across the order)">
             <DataList
               rows={[
                 ["Setups", setup.setups],
                 ["Setup hours", formatNumber(setup.setup_hours)],
-                ["Discount rate", `${Math.round(discount.rate * 100)}%`],
               ]}
             />
           </Group>
           {leadTime && (
-            <Group title="Lead time (uses undiscounted machine time)">
+            <Group title="Lead time">
               <DataList
                 rows={[
                   ["Total machine hours", formatNumber(leadTime.total_machine_hours)],

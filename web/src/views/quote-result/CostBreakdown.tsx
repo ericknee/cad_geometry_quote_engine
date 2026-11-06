@@ -29,8 +29,7 @@ function Row({
 }
 
 export default function CostBreakdown({ cost }: { cost: Cost }) {
-  const { material, machine, setup, discount } = cost;
-  const discounted = discount.rate > 0;
+  const { material, machine, setup } = cost;
 
   return (
     <Card title="Cost breakdown">
@@ -51,7 +50,7 @@ export default function CostBreakdown({ cost }: { cost: Cost }) {
               label="Material"
               note={
                 material.minimum_applied
-                  ? `${formatMoney(material.minimum_charge)} minimum applied (computed ${formatMoney(material.computed_cost_unit)})`
+                  ? `${formatMoney(material.minimum_charge)} order minimum applied (computed ${formatMoney(material.computed_cost_order)})`
                   : undefined
               }
               unit={formatMoney(material.cost_unit)}
@@ -59,21 +58,14 @@ export default function CostBreakdown({ cost }: { cost: Cost }) {
             />
             <Row
               label="Machine time"
-              note="Before quantity discount"
               unit={formatMoney(machine.cost_unit)}
               order={formatMoney(machine.cost_order)}
             />
             <Row
               label="Setup"
-              note="Shared across the order"
+              note="One-time programming and fixturing, shared across the order"
               unit={formatMoney(setup.cost_unit)}
               order={formatMoney(setup.cost_order)}
-            />
-            <Row
-              label="Quantity discount"
-              note={`${Math.round(discount.rate * 100)}% off machine time${discounted ? "" : " (none at this quantity)"}`}
-              unit={discounted ? `-${formatMoney(discount.amount_unit)}` : formatMoney(0)}
-              order={discounted ? `-${formatMoney(discount.amount_order)}` : formatMoney(0)}
             />
             <Row
               label="Total"

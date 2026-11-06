@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from api.db.indexes import ensure_indexes
 from api.repositories.quotes_repository import QuotesRepository
-from api.types.quotes_types import ErrorDetail, QuoteStatus, QuoteSummary
+from api.types.quotes_types import ErrorDetail, QuoteDocument, QuoteStatus, QuoteSummary
 from bson import ObjectId
 from geometry.analyzer import analyze_file
 from pricing import lead_time, price
@@ -31,6 +31,16 @@ async def test_insert_and_find(repo):
     assert created["status"] == "queued"
     assert "_id" not in created
     assert (await repo.find_by_id(created["id"]))["file_name"] == "gear.step"
+
+
+async def test_stored_quote_matches_the_document_model(repo, mongo_db):
+    created = await _insert(repo)
+    raw = await mongo_db["quotes"].find_one({"_id": ObjectId(created["id"])})
+    raw.pop("_id")
+    document = QuoteDocument.model_validate(raw)
+    assert document.status == "queued"
+    assert (document.attempts, document.started_at, document.geometry) == (0, None, None)
+    assert set(raw) == set(QuoteDocument.model_fields)
 
 
 async def test_find_unknown_or_malformed_id_returns_none(repo):

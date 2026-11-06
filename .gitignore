@@ -16,3 +16,7 @@ uploads/
 .DS_Store
 Thumbs.db
 *.tsbuildinfo
+
+# Local decision log, not tracked
+DECISIONS.md
+Vendra_Quoting_Engine_PRD.md

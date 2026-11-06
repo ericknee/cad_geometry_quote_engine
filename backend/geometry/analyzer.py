@@ -14,6 +14,7 @@ from geometry.features import (
     sa_to_volume_ratio,
 )
 from geometry.loader import LoadedStep, load_step
+from geometry.materials import DEFAULT_MATERIAL, Material
 from geometry.measures import (
     DEFAULT_STOCK_ALLOWANCE_MM,
     SolidMeasures,
@@ -54,13 +55,17 @@ def analyze_solid(solid: TopoDS_Shape) -> SolidAnalysis:
 
 
 def analyze_file(
-    path: str | Path, stock_allowance_mm: float = DEFAULT_STOCK_ALLOWANCE_MM
+    path: str | Path,
+    stock_allowance_mm: float = DEFAULT_STOCK_ALLOWANCE_MM,
+    material: Material = DEFAULT_MATERIAL,
 ) -> GeometryResult:
-    return analyze_loaded(load_step(path), stock_allowance_mm)
+    return analyze_loaded(load_step(path), stock_allowance_mm, material)
 
 
 def analyze_loaded(
-    loaded: LoadedStep, stock_allowance_mm: float = DEFAULT_STOCK_ALLOWANCE_MM
+    loaded: LoadedStep,
+    stock_allowance_mm: float = DEFAULT_STOCK_ALLOWANCE_MM,
+    material: Material = DEFAULT_MATERIAL,
 ) -> GeometryResult:
     """Analyze every solid, then merge into one result (sums, one box around all solids)."""
     if stock_allowance_mm < 0:
@@ -95,8 +100,11 @@ def analyze_loaded(
             width=round(dimensions[1], 3),
             height=round(dimensions[2], 3),
         ),
+        material=material.name,
         stock_volume_cm3=round(stock, 3),
         volume_cm3=round(measures.volume_cm3, 4),
+        stock_mass_kg=round(material.mass_kg(stock), 5),
+        part_mass_kg=round(material.mass_kg(measures.volume_cm3), 5),
         surface_area_cm2=round(measures.surface_area_cm2, 3),
         features=Features(
             face_count=features.face_count,
@@ -104,6 +112,7 @@ def analyze_loaded(
             cylindrical_faces=features.cylindrical_faces,
             holes_detected=features.holes_detected,
             setups=features.setups,
+            thin_wall_count=features.thin_wall_count,
             sa_to_volume_ratio=round(
                 sa_to_volume_ratio(measures.surface_area_cm2, measures.volume_cm3), 3
             ),

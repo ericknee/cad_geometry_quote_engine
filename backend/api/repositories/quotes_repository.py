@@ -13,7 +13,13 @@ from pricing.models import CostBreakdown, LeadTime
 from pymongo import ASCENDING, DESCENDING, ReturnDocument
 from pymongo.asynchronous.database import AsyncDatabase
 
-from api.types.quotes_types import ErrorDetail, QuoteStatus, QuoteSummary, SortOrder
+from api.types.quotes_types import (
+    ErrorDetail,
+    QuoteDocument,
+    QuoteStatus,
+    QuoteSummary,
+    SortOrder,
+)
 
 COLLECTION = "quotes"
 
@@ -52,23 +58,15 @@ class QuotesRepository:
         self, *, file_name: str, file_path: str, file_hash: str, quantity: int, material: str
     ) -> Document:
         now = _now()
-        doc = {
-            "file_name": file_name,
-            "file_path": file_path,
-            "file_hash": file_hash,
-            "quantity": quantity,
-            "material": material,
-            "status": QuoteStatus.QUEUED.value,
-            "geometry": None,
-            "cost_breakdown": None,
-            "lead_time": None,
-            "lead_time_days": None,
-            "error": None,
-            "attempts": 0,
-            "created_at": now,
-            "updated_at": now,
-            "started_at": None,
-        }
+        doc = QuoteDocument(
+            file_name=file_name,
+            file_path=file_path,
+            file_hash=file_hash,
+            quantity=quantity,
+            material=material,
+            created_at=now,
+            updated_at=now,
+        ).model_dump()
         result = await self._quotes.insert_one(doc)
         return _with_id(doc, result.inserted_id)
 

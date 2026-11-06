@@ -11,6 +11,7 @@ from pathlib import Path
 
 from geometry.analyzer import analyze_file
 from geometry.errors import GeometryError
+from geometry.materials import DEFAULT_MATERIAL, MATERIALS, get_material
 from geometry.measures import DEFAULT_STOCK_ALLOWANCE_MM
 
 
@@ -39,6 +40,12 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="MM",
         help=f"extra stock per side in mm (default {DEFAULT_STOCK_ALLOWANCE_MM})",
     )
+    parser.add_argument(
+        "--material",
+        choices=sorted(MATERIALS),
+        default=DEFAULT_MATERIAL.name,
+        help=f"material for the mass figures (default {DEFAULT_MATERIAL.name})",
+    )
     return parser
 
 
@@ -49,7 +56,7 @@ def _error_json(code: str, message: str, pretty: bool) -> str:
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
-        result = analyze_file(args.file, args.stock_allowance)
+        result = analyze_file(args.file, args.stock_allowance, get_material(args.material))
         # ensure_ascii keeps output safe on consoles that cannot print non-ASCII (Windows).
         text = json.dumps(result.model_dump(), indent=2 if args.pretty else None)
     except GeometryError as error:

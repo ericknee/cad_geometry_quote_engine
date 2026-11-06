@@ -11,22 +11,23 @@ class MaterialCost(_Frozen):
     stock_volume_cm3: float
     part_volume_cm3: float
     removed_volume_cm3: float  # stock - part
-    computed_cost_unit: float  # stock x density x price, before the minimum
-    minimum_charge: float
+    computed_cost_unit: float  # stock mass x price, before the minimum
+    computed_cost_order: float  # computed_cost_unit x quantity
+    minimum_charge: float  # per order
     minimum_applied: bool
-    cost_unit: float  # max(computed, minimum)
-    cost_order: float
+    cost_order: float  # max(computed order cost, minimum)
+    cost_unit: float  # cost_order / quantity
 
 
 class MachineCost(_Frozen):
-    """Machine time and cost before any quantity discount."""
+    """Machine time and cost for one part."""
 
     roughing_minutes: float
-    finishing_minutes: float
     hole_minutes: float
-    handling_minutes: float
-    complexity_score: float  # the value actually used
-    cycle_minutes: float  # (sum of the four) x complexity
+    edge_minutes: float
+    thin_wall_count: int
+    mrr_cm3_per_min: float  # roughing rate used, after the thin-wall cut
+    cycle_minutes: float  # roughing + holes + edges
     cost_unit: float
     cost_order: float
 
@@ -38,25 +39,18 @@ class SetupCost(_Frozen):
     cost_order: float
 
 
-class QuantityDiscount(_Frozen):
-    rate: float
-    amount_unit: float  # machine cost x rate
-    amount_order: float
-
-
 class CostBreakdown(_Frozen):
     quantity: int
     pricing_version: str
     material: MaterialCost
     machine: MachineCost
     setup: SetupCost
-    discount: QuantityDiscount
     total_cost_per_unit: float
     total_order_cost: float
 
 
 class LeadTime(_Frozen):
-    total_machine_hours: float  # setup hours + undiscounted cycle hours x quantity
+    total_machine_hours: float  # setup hours + cycle hours x quantity
     productive_hours_per_day: float
     work_days: int
     complexity_buffer_days: int
