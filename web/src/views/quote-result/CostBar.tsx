@@ -3,9 +3,9 @@ import type { CostBreakdown } from "@/types";
 
 // Segment colors, shared with the legend below the bar.
 const SEGMENTS = [
-  { key: "material", label: "Material", color: "bg-amber-500" },
-  { key: "machine", label: "Machine time", color: "bg-blue-600" },
-  { key: "setup", label: "Setup", color: "bg-emerald-600" },
+  { key: "material", label: "Material", color: "bg-chart-material" },
+  { key: "machine", label: "Machine time", color: "bg-chart-machine" },
+  { key: "setup", label: "Setup", color: "bg-chart-setup" },
 ] as const;
 
 /** One stacked bar of the per-unit cost before the quantity discount. */
@@ -20,7 +20,7 @@ export default function CostBar({ cost }: { cost: CostBreakdown }) {
   return (
     <div>
       <div
-        className="flex h-4 overflow-hidden rounded-full bg-neutral-100"
+        className="flex h-4 overflow-hidden rounded-full bg-surface-muted"
         role="img"
         aria-label="Share of per-unit cost: material, machine time and setup"
       >
@@ -32,7 +32,7 @@ export default function CostBar({ cost }: { cost: CostBreakdown }) {
           />
         ))}
       </div>
-      <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-neutral-600">
+      <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-fg-muted">
         {SEGMENTS.map(({ key, label, color }) => (
           <li key={key} className="flex items-center gap-1.5">
             <span className={`h-2.5 w-2.5 rounded-full ${color}`} />
@@ -41,7 +41,7 @@ export default function CostBar({ cost }: { cost: CostBreakdown }) {
           </li>
         ))}
       </ul>
-      <p className="mt-1 text-xs text-neutral-500">Per unit, before the quantity discount.</p>
+      <p className="mt-1 text-xs text-fg-muted">Per unit, before the quantity discount.</p>
     </div>
   );
 }

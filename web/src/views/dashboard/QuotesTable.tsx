@@ -1,10 +1,11 @@
 import Link from "next/link";
+import StatusBadge from "@/components/StatusBadge";
 import { formatDate, formatMoney } from "@/format";
 import { routes } from "@/routes";
 import type { QuoteSummary } from "@/types";
-import RowStatusControl from "./RowStatusControl";
+import RowActions from "./RowActions";
 
-const HEAD = "px-3 py-2 text-left font-medium text-neutral-500";
+const HEAD = "whitespace-nowrap px-3 py-2 text-left font-medium text-fg-muted";
 const CELL = "px-3 py-3";
 
 export default function QuotesTable({
@@ -15,26 +16,27 @@ export default function QuotesTable({
   onChanged: () => void;
 }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+    <div className="overflow-x-auto rounded-lg border border-border bg-surface">
       <table className="w-full text-sm">
-        <thead className="border-b border-neutral-200">
+        <thead className="border-b border-border bg-surface-muted">
           <tr>
+            <th className={HEAD}>Status</th>
             <th className={HEAD}>File</th>
             <th className={`${HEAD} text-right`}>Qty</th>
             <th className={`${HEAD} text-right`}>Per unit</th>
             <th className={`${HEAD} text-right`}>Total</th>
             <th className={`${HEAD} text-right`}>Lead time</th>
-            <th className={HEAD}>Status</th>
             <th className={HEAD}>Created</th>
-            <th className={HEAD}>
-              <span className="sr-only">Details</span>
-            </th>
+            <th className={HEAD}>Actions</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-neutral-100">
+        <tbody className="divide-y divide-border/50">
           {quotes.map((quote) => (
             <tr key={quote.id}>
-              <td className={`${CELL} max-w-56 break-all font-medium`}>
+              <td className={CELL}>
+                <StatusBadge status={quote.status} />
+              </td>
+              <td className={`${CELL} max-w-48 break-words font-medium`}>
                 <Link href={routes.quote(quote.id)} className="hover:underline">
                   {quote.file_name}
                 </Link>
@@ -51,16 +53,11 @@ export default function QuotesTable({
               <td className={`${CELL} text-right tabular-nums`}>
                 {quote.lead_time_days === null ? "-" : `${quote.lead_time_days} days`}
               </td>
-              <td className={CELL}>
-                <RowStatusControl quote={quote} onChanged={onChanged} />
-              </td>
-              <td className={`${CELL} whitespace-nowrap text-neutral-600`}>
+              <td className={`${CELL} min-w-28 text-fg-muted`}>
                 {formatDate(quote.created_at)}
               </td>
               <td className={CELL}>
-                <Link href={routes.quote(quote.id)} className="underline">
-                  View
-                </Link>
+                <RowActions quote={quote} onChanged={onChanged} />
               </td>
             </tr>
           ))}
@@ -73,12 +70,12 @@ export default function QuotesTable({
 export function TableSkeleton() {
   return (
     <div
-      className="space-y-px overflow-hidden rounded-lg border border-neutral-200 bg-white"
+      className="space-y-px overflow-hidden rounded-lg border border-border bg-surface"
       role="status"
       aria-label="Loading quotes"
     >
       {Array.from({ length: 5 }, (_, i) => (
-        <div key={i} className="h-12 animate-pulse bg-neutral-100" />
+        <div key={i} className="h-12 animate-pulse bg-surface-muted" />
       ))}
     </div>
   );

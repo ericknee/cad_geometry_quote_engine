@@ -5,7 +5,7 @@ import type { CostBreakdown } from "@/types";
 function Figure({ label, value, big = false }: { label: string; value: string; big?: boolean }) {
   return (
     <div>
-      <dt className="text-sm text-neutral-500">{label}</dt>
+      <dt className="text-sm text-fg-muted">{label}</dt>
       <dd className={big ? "text-4xl font-semibold tracking-tight" : "text-2xl font-semibold"}>
         {value}
       </dd>

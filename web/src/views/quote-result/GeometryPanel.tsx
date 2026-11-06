@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Alert from "@/components/Alert";
 import Card from "@/components/Card";
 import DataList from "@/components/DataList";
 import { formatLength, formatNumber } from "@/format";
@@ -11,14 +12,14 @@ export default function GeometryPanel({ geometry }: { geometry: GeometryResult }
   const { length, width, height } = geometry.bounding_box_mm;
 
   const toggle = (
-    <div className="flex overflow-hidden rounded-md border border-neutral-300 text-xs">
+    <div className="flex overflow-hidden rounded-md border border-border-strong text-xs">
       {(["mm", "in"] as const).map((u) => (
         <button
           key={u}
           type="button"
           aria-pressed={unit === u}
           onClick={() => setUnit(u)}
-          className={`px-2.5 py-1 ${unit === u ? "bg-neutral-900 text-white" : "bg-white hover:bg-neutral-50"}`}
+          className={`px-2.5 py-1 ${unit === u ? "bg-primary text-primary-fg" : "bg-surface hover:bg-surface-muted"}`}
         >
           {u}
         </button>
@@ -40,11 +41,13 @@ export default function GeometryPanel({ geometry }: { geometry: GeometryResult }
         ]}
       />
       {geometry.warnings.length > 0 && (
-        <ul className="mt-4 space-y-1 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          {geometry.warnings.map((warning) => (
-            <li key={warning}>{warning}</li>
-          ))}
-        </ul>
+        <Alert variant="warning" className="mt-4">
+          <ul className="space-y-1">
+            {geometry.warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </Alert>
       )}
     </Card>
   );

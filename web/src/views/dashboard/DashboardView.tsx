@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { describeError } from "@/api/errors";
+import Alert from "@/components/Alert";
+import Button, { buttonClasses } from "@/components/Button";
 import Card from "@/components/Card";
 import { routes } from "@/routes";
 import {
@@ -52,10 +54,7 @@ export default function DashboardView() {
     <main className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Quotes</h1>
-        <Link
-          href={routes.newQuote}
-          className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
-        >
+        <Link href={routes.newQuote} className={buttonClasses("primary")}>
           New quote
         </Link>
       </div>
@@ -63,15 +62,12 @@ export default function DashboardView() {
       <QuotesFilters filters={filters} onChange={changeFilters} />
 
       {error !== null && (
-        <div
-          role="alert"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-red-50 px-4 py-3 text-sm text-red-800"
-        >
+        <Alert className="flex flex-wrap items-center justify-between gap-3">
           <span>{describeError(error)}</span>
-          <button onClick={reload} className="rounded-md border border-red-300 px-3 py-1 font-medium">
+          <Button variant="danger" size="sm" onClick={reload}>
             Retry
-          </button>
-        </div>
+          </Button>
+        </Alert>
       )}
 
       {loading && error === null && <TableSkeleton />}
@@ -94,12 +90,12 @@ export default function DashboardView() {
             <p className="font-medium">
               {isDefault ? "No quotes yet" : "No quotes match these filters"}
             </p>
-            <p className="mt-1 text-sm text-neutral-600">
+            <p className="mt-1 text-sm text-fg-muted">
               {isDefault
                 ? "Upload a STEP file to create your first quote."
                 : "Try a different status or show archived quotes."}
             </p>
-            <Link href={routes.newQuote} className="mt-4 inline-block text-sm underline">
+            <Link href={routes.newQuote} className="mt-4 inline-block text-sm text-primary underline">
               New quote
             </Link>
           </div>

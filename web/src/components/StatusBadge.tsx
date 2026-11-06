@@ -2,12 +2,12 @@ import type { QuoteStatus } from "@/types";
 
 // One color per status, shared by the result page and the dashboard.
 const STYLES: Record<QuoteStatus, string> = {
-  queued: "bg-neutral-100 text-neutral-700",
-  processing: "bg-blue-100 text-blue-800",
-  failed: "bg-red-100 text-red-800",
-  quoted: "bg-emerald-100 text-emerald-800",
-  reviewed: "bg-violet-100 text-violet-800",
-  archived: "bg-neutral-200 text-neutral-500",
+  queued: "bg-surface-muted text-fg-muted",
+  processing: "bg-info-soft text-info",
+  failed: "bg-danger-soft text-danger",
+  quoted: "bg-success-soft text-success",
+  reviewed: "bg-accent-soft text-primary-hover",
+  archived: "bg-border/50 text-fg-muted",
 };
 
 export default function StatusBadge({ status }: { status: QuoteStatus }) {

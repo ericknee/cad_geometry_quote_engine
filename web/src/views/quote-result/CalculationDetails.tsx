@@ -29,7 +29,7 @@ export default function CalculationDetails({
         <summary className="cursor-pointer font-semibold">How this was calculated</summary>
         <div className="mt-4 grid gap-6 sm:grid-cols-2">
           <Group title="Material">
-            <p className="mb-2 text-xs text-neutral-500">
+            <p className="mb-2 text-xs text-fg-muted">
               Billed on the raw block we cut from (stock), not the finished part, because the
               removed material is paid for too.
             </p>
@@ -80,7 +80,7 @@ export default function CalculationDetails({
             </Group>
           )}
         </div>
-        <p className="mt-4 text-xs text-neutral-500">Pricing version {cost.pricing_version}</p>
+        <p className="mt-4 text-xs text-fg-muted">Pricing version {cost.pricing_version}</p>
       </details>
     </Card>
   );

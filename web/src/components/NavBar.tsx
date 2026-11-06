@@ -3,9 +3,9 @@ import { routes } from "@/routes";
 
 export default function NavBar() {
   return (
-    <header className="border-b border-neutral-200 bg-white">
+    <header className="border-b border-border bg-surface">
       <nav className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
-        <Link href={routes.newQuote} className="text-lg font-semibold">
+        <Link href={routes.newQuote} className="text-lg font-semibold text-primary">
           Vendra
         </Link>
         <div className="flex gap-6 text-sm">

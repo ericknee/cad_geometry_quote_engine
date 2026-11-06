@@ -1,5 +1,4 @@
-const BUTTON =
-  "rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40";
+import Button from "@/components/Button";
 
 export default function Pagination({
   total,
@@ -19,16 +18,16 @@ export default function Pagination({
 
   return (
     <div className="flex items-center justify-between gap-3">
-      <p className="text-sm text-neutral-600">
+      <p className="text-sm text-fg-muted">
         Showing {first}-{last} of {total}
       </p>
       <div className="flex gap-2">
-        <button className={BUTTON} disabled={page <= 1} onClick={() => onPage(page - 1)}>
+        <Button variant="secondary" disabled={page <= 1} onClick={() => onPage(page - 1)}>
           Previous
-        </button>
-        <button className={BUTTON} disabled={page >= pages} onClick={() => onPage(page + 1)}>
+        </Button>
+        <Button variant="secondary" disabled={page >= pages} onClick={() => onPage(page + 1)}>
           Next
-        </button>
+        </Button>
       </div>
     </div>
   );

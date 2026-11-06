@@ -22,10 +22,10 @@ export default function FileDropzone({ file, error, disabled, onSelect }: Props)
   }
 
   const border = error
-    ? "border-red-400 bg-red-50"
+    ? "border-danger bg-danger-soft"
     : dragging
-      ? "border-blue-500 bg-blue-50"
-      : "border-neutral-300 bg-white hover:border-neutral-400";
+      ? "border-accent bg-accent-soft"
+      : "border-border-strong bg-surface hover:border-primary";
 
   return (
     <div>
@@ -48,14 +48,14 @@ export default function FileDropzone({ file, error, disabled, onSelect }: Props)
         {file ? (
           <>
             <span className="font-medium">{file.name}</span>
-            <span className="mt-1 text-sm text-neutral-500">
+            <span className="mt-1 text-sm text-fg-muted">
               {formatNumber(file.size / 1024 / 1024)} MB. Click or drop to replace.
             </span>
           </>
         ) : (
           <>
             <span className="font-medium">Drop your STEP file here, or click to browse</span>
-            <span className="mt-1 text-sm text-neutral-500">
+            <span className="mt-1 text-sm text-fg-muted">
               {ACCEPTED_EXTENSIONS.join(" or ")} files only
             </span>
           </>
@@ -72,7 +72,7 @@ export default function FileDropzone({ file, error, disabled, onSelect }: Props)
         }}
       />
       {error && (
-        <p role="alert" className="mt-2 text-sm text-red-700">
+        <p role="alert" className="mt-2 text-sm text-danger">
           {error}
         </p>
       )}

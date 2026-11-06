@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { describeError } from "@/api/errors";
 import { createQuote } from "@/api/quotes";
+import Alert from "@/components/Alert";
+import Button from "@/components/Button";
 import { usePollQuote } from "@/hooks/usePollQuote";
 import { routes } from "@/routes";
 import { IN_PROGRESS_STATUSES } from "@/types";
@@ -73,7 +75,7 @@ export default function NewQuoteView() {
   return (
     <main className="mx-auto max-w-xl">
       <h1 className="text-2xl font-semibold">New quote</h1>
-      <p className="mt-1 text-neutral-600">
+      <p className="mt-1 text-fg-muted">
         Upload a STEP file and a quantity to get an instant CNC quote in 6061 aluminum.
       </p>
 
@@ -89,18 +91,12 @@ export default function NewQuoteView() {
         />
 
         {errorMessage && (
-          <p role="alert" className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-800">
-            {errorMessage}
-          </p>
+          <Alert>{errorMessage}</Alert>
         )}
 
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="w-full rounded-md bg-neutral-900 px-4 py-3 font-medium text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-40"
-        >
+        <Button type="submit" size="lg" disabled={!canSubmit}>
           {uploading ? "Uploading..." : analyzing ? "Analyzing your part..." : "Generate quote"}
-        </button>
+        </Button>
       </form>
     </main>
   );

@@ -9,7 +9,7 @@ export default function QuoteHeader({ quote }: { quote: QuoteDetail }) {
         <h1 className="break-all text-2xl font-semibold">{quote.file_name}</h1>
         <StatusBadge status={quote.status} />
       </div>
-      <p className="mt-1 text-sm text-neutral-600">
+      <p className="mt-1 text-sm text-fg-muted">
         Quantity {quote.quantity.toLocaleString("en-US")} · {quote.material} ·{" "}
         {formatDate(quote.created_at)}
       </p>

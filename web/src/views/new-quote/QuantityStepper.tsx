@@ -1,5 +1,7 @@
 "use client";
 
+import Button from "@/components/Button";
+import TextInput from "@/components/TextInput";
 import { MAX_QUANTITY, MIN_QUANTITY } from "./limits";
 
 interface Props {
@@ -25,47 +27,42 @@ export default function QuantityStepper({ value, disabled, onChange }: Props) {
     onChange(String(next));
   }
 
-  const button =
-    "h-10 w-10 rounded-md border border-neutral-300 bg-white text-lg hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50";
-
   return (
     <div>
       <label htmlFor="quantity" className="mb-1 block text-sm font-medium">
         Quantity
       </label>
       <div className="flex items-center gap-2">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="icon"
           aria-label="Decrease quantity"
-          className={button}
           disabled={disabled || (current !== null && current <= MIN_QUANTITY)}
           onClick={() => step(-1)}
         >
           -
-        </button>
-        <input
+        </Button>
+        <TextInput
           id="quantity"
           inputMode="numeric"
           value={value}
           disabled={disabled}
-          aria-invalid={invalid}
+          invalid={invalid}
           onChange={(e) => onChange(e.target.value)}
-          className={`h-10 w-28 rounded-md border px-3 text-center disabled:opacity-60 ${
-            invalid ? "border-red-400" : "border-neutral-300"
-          }`}
+          className="w-28 text-center"
         />
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="icon"
           aria-label="Increase quantity"
-          className={button}
           disabled={disabled || (current !== null && current >= MAX_QUANTITY)}
           onClick={() => step(1)}
         >
           +
-        </button>
+        </Button>
       </div>
       {invalid && (
-        <p role="alert" className="mt-1 text-sm text-red-700">
+        <p role="alert" className="mt-1 text-sm text-danger">
           Enter a whole number from {MIN_QUANTITY} to {MAX_QUANTITY.toLocaleString("en-US")}.
         </p>
       )}

@@ -11,7 +11,7 @@ export default function Card({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-neutral-200 bg-white p-5">
+    <section className="rounded-lg border border-border bg-surface p-5">
       {(title || action) && (
         <div className="mb-4 flex items-center justify-between gap-3">
           {title && <h2 className="font-semibold">{title}</h2>}
