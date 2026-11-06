@@ -101,6 +101,21 @@ async def test_list_filters_by_status(service, repo):
     assert page.total == 1
 
 
+async def test_list_can_hide_archived_and_keeps_the_total_in_step(service, repo):
+    kept = await _quote_with_status(repo, QuoteStatus.QUOTED)
+    await _quote_with_status(repo, QuoteStatus.ARCHIVED)
+
+    hidden = await service.list_quotes(None, limit=20, skip=0, exclude_archived=True)
+    assert [item.id for item in hidden.items] == [kept]
+    assert hidden.total == 1
+    assert (await service.list_quotes(None, limit=20, skip=0)).total == 2
+    # An explicit status wins, so the archived list is still reachable.
+    archived = await service.list_quotes(
+        QuoteStatus.ARCHIVED, limit=20, skip=0, exclude_archived=True
+    )
+    assert archived.total == 1
+
+
 @pytest.mark.parametrize(
     ("current", "new"),
     [(c, n) for n, sources in ALLOWED_TRANSITIONS.items() for c in sources],

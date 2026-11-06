@@ -78,20 +78,22 @@ class QuotesRepository:
             return None
         return _to_document(await self._quotes.find_one({"_id": oid}))
 
-    async def list_page(self, status: QuoteStatus | None, limit: int, skip: int) -> list[Document]:
+    async def list_page(
+        self, status: QuoteStatus | None, limit: int, skip: int, *, exclude_archived: bool = False
+    ) -> list[Document]:
         """One page of quotes, newest first. Slim documents: only what a QuoteSummary needs
         (see _SUMMARY_PROJECTION), so the large geometry is never sent. Use find_by_id for all."""
         # _id breaks ties so pages stay stable when several quotes share a timestamp.
         cursor = (
-            self._quotes.find(_status_filter(status), _SUMMARY_PROJECTION)
+            self._quotes.find(_status_filter(status, exclude_archived), _SUMMARY_PROJECTION)
             .sort([("created_at", DESCENDING), ("_id", DESCENDING)])
             .skip(skip)
             .limit(limit)
         )
         return [_to_document(raw) async for raw in cursor]
 
-    async def count(self, status: QuoteStatus | None) -> int:
-        return await self._quotes.count_documents(_status_filter(status))
+    async def count(self, status: QuoteStatus | None, *, exclude_archived: bool = False) -> int:
+        return await self._quotes.count_documents(_status_filter(status, exclude_archived))
 
     async def transition_status(
         self, quote_id: str, current: QuoteStatus, new: QuoteStatus
@@ -215,8 +217,11 @@ class QuotesRepository:
         return _to_document(raw)
 
 
-def _status_filter(status: QuoteStatus | None) -> Document:
-    return {} if status is None else {"status": status.value}
+def _status_filter(status: QuoteStatus | None, exclude_archived: bool = False) -> Document:
+    # An explicit status wins over exclude_archived, so status=archived still lists archived quotes.
+    if status is not None:
+        return {"status": status.value}
+    return {"status": {"$ne": QuoteStatus.ARCHIVED.value}} if exclude_archived else {}
 
 
 def _with_id(doc: Document, inserted_id: ObjectId) -> Document:

@@ -43,8 +43,10 @@ async def list_quotes(
     status: QuoteStatus | None = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
     skip: Annotated[int, Query(ge=0)] = 0,
+    # Hides archived quotes from the unfiltered list; ignored when `status` is given.
+    exclude_archived: bool = False,
 ) -> QuoteList:
-    return await service.list_quotes(status, limit, skip)
+    return await service.list_quotes(status, limit, skip, exclude_archived=exclude_archived)
 
 
 @router.get("/{quote_id}", response_model=QuoteDetail, responses={404: _ERRORS})
