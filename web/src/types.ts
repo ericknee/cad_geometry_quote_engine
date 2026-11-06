@@ -44,7 +44,6 @@ export interface Features {
   thin_wall_count: number;
   sa_to_volume_ratio: number;
   material_removal_ratio: number;
-  complexity_score: number | null;
 }
 
 export interface GeometryResult {

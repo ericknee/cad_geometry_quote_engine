@@ -44,7 +44,7 @@ def cycle_time(geometry: GeometryResult, config: PricingConfig) -> Cycle:
     return Cycle(
         roughing_minutes=removed / mrr,
         hole_minutes=features.holes_detected * config.minutes_per_hole,
-        edge_minutes=features.edge_count * config.minutes_per_edge,
+        edge_minutes=min(features.edge_count * config.minutes_per_edge, config.max_edge_minutes),
         mrr_cm3_per_min=mrr,
     )
 

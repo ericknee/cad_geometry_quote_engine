@@ -151,7 +151,8 @@ async def test_upload_to_quote_to_review_end_to_end(client, settings, mongo_db):
     assert quote["status"] == "quoted"
     assert quote["geometry"]["bounding_box_mm"]["length"] == pytest.approx(23.368, abs=0.001)
     assert quote["cost_breakdown"]["total_cost_per_unit"] == pytest.approx(44.08, abs=0.02)
-    assert quote["lead_time_days"] == 6 == quote["lead_time"]["days"]
+    # 5 base + 1 work day + 1 buffer day
+    assert quote["lead_time_days"] == 7 == quote["lead_time"]["days"]
 
     row = client.get("/api/quotes", params={"status": "quoted"}).json()["items"][0]
     assert row["total_cost_per_unit"] == quote["cost_breakdown"]["total_cost_per_unit"]

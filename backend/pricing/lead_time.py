@@ -12,13 +12,11 @@ _HOURS_DECIMALS = 3
 _FLOAT_NOISE_DECIMALS = 9  # stops 8.0000000001 hours from rounding up to a whole extra day
 
 
-def complexity_buffer_days(score: float, config: PricingConfig) -> int:
-    """Extra days for the highest band whose minimum score is not above `score`."""
-    days = 0
-    for minimum, band_days in config.complexity_buffer_bands:
-        if score >= minimum:
-            days = band_days
-    return days
+def complexity_buffer_days(face_count: int, machine_days: float, config: PricingConfig) -> int:
+    """Whole days: a share of machine days that grows with face count, up to the max rate."""
+    complexity = min(face_count / config.buffer_full_faces, 1)
+    buffer = machine_days * config.max_buffer_rate * complexity
+    return math.ceil(round(buffer, _FLOAT_NOISE_DECIMALS))
 
 
 def lead_time(
@@ -32,15 +30,10 @@ def lead_time(
     setup = setup_hours(geometry, config)
     total_hours = setup + cycle.minutes / 60 * quantity
 
-    work_days = math.ceil(
-        round(total_hours / config.productive_hours_per_day, _FLOAT_NOISE_DECIMALS)
-    )
-    # Lead time still reads the geometry's complexity score (None until it is implemented);
-    # the price does not use it.
-    score = geometry.features.complexity_score
-    buffer_days = complexity_buffer_days(
-        config.default_complexity_score if score is None else score, config
-    )
+    machine_days = total_hours / config.productive_hours_per_day
+    work_days = math.ceil(round(machine_days, _FLOAT_NOISE_DECIMALS))
+    # Each part is rounded up on its own, so the breakdown shows whole days only.
+    buffer_days = complexity_buffer_days(geometry.features.face_count, machine_days, config)
     return LeadTime(
         total_machine_hours=round(total_hours, _HOURS_DECIMALS),
         productive_hours_per_day=config.productive_hours_per_day,

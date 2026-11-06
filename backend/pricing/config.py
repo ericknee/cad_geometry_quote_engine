@@ -21,14 +21,15 @@ class PricingConfig(BaseModel):
     # Assumption: the machine slows and re-accelerates where the tool path changes direction, so
     # every edge in the part adds a little time. Not measured; 0.05 min = 3 s per edge.
     minutes_per_edge: float = Field(default=0.05, ge=0)
+    # Cap on the edge time per unit, so a part with thousands of edges is not priced by edge
+    # count alone. Assumption; 60 min = 1 hour.
+    max_edge_minutes: float = Field(default=60.0, ge=0)
     # Thin walls (under 3 mm, counted by the geometry engine) force lighter cuts, so they lower
     # the MRR in even steps from the base rate down to the minimum: 0 thin walls = base rate,
     # `thin_walls_for_min_mrr` or more = the minimum.
     #   MRR = base - (base - minimum) x min(thin_walls, full) / full
     min_roughing_cm3_per_min: float = Field(default=20.0, gt=0)
     thin_walls_for_min_mrr: int = Field(default=8, ge=1)
-    # Lead time only: used when the geometry has no complexity score yet. Not used in price.
-    default_complexity_score: float = Field(default=1.0, ge=1.0, le=3.0)
 
     # Setup is a one-time cost per order, built from two parts. The log2-face value (0.19) is
     # fitted to the gear quote (qty 1 ~ $193, competitors $190-195); the others are assumptions.
@@ -43,15 +44,16 @@ class PricingConfig(BaseModel):
     # Lead time (business days).
     min_lead_time_days: int = Field(default=5, ge=0)
     productive_hours_per_day: float = Field(default=8.0, gt=0)
-    # (minimum complexity score, extra days), ascending. Placeholder: no extra days until the
-    # complexity score exists.
-    complexity_buffer_bands: tuple[tuple[float, int], ...] = ((1.0, 0),)
+    # Complexity buffer: a safety margin for programming, fixturing and inspection, not cutting.
+    # Assumptions, not measured. Complexity = min(faces / buffer_full_faces, 1), and
+    #   buffer days = ceil(machine days x max_buffer_rate x complexity)
+    # so a part with `buffer_full_faces` or more faces gets the full rate. 100 faces is a guess
+    # from two samples (bracket 17, gear 99).
+    buffer_full_faces: int = Field(default=100, ge=1)
+    max_buffer_rate: float = Field(default=0.5, ge=0)
 
     @model_validator(mode="after")
     def _check_tables(self) -> "PricingConfig":
         if self.min_roughing_cm3_per_min > self.roughing_cm3_per_min:
             raise ValueError("min_roughing_cm3_per_min must not exceed roughing_cm3_per_min")
-        scores = [s for s, _ in self.complexity_buffer_bands]
-        if not scores or scores[0] > 1.0 or scores != sorted(set(scores)):
-            raise ValueError("complexity_buffer_bands must cover score 1.0 and strictly ascend")
         return self

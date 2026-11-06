@@ -20,7 +20,8 @@ counted several times).
 Limits: samples can miss a very small thin feature, and fewer samples on large parts make that
 more likely. On the gear, 2x2 samples miss its thin wall (count 0); 3x3 and above find it, except
 that 4x4 finds 2 (a group's links can depend on where the samples fall). The per-ray face check is
-a plain loop over all faces, so time still grows with faces squared, just with a small constant.
+a plain loop over all faces, so time still grows with faces squared, just with a small constant;
+parts above MAX_FACES_FOR_THIN_WALLS faces skip the check and report 0 thin walls.
 """
 
 import math
@@ -44,6 +45,9 @@ THIN_WALL_MM = 3.0
 
 START_SAMPLES_PER_AXIS = 3  # per face, for small parts
 RAY_BUDGET = 5000  # total rays; more faces means fewer samples per face (never below 1x1)
+# Above this many faces the check is skipped (count 0): every ray scans all face boxes, so time
+# grows with faces squared and a very detailed part could exceed the analysis timeout.
+MAX_FACES_FOR_THIN_WALLS = 3000
 
 _PARALLEL_COS = 0.94  # hit face must point back within ~20 degrees to count as the other side
 _RAY_START_MM = 1e-4  # skip the face the ray starts on
@@ -63,6 +67,8 @@ def samples_per_axis(face_count: int) -> int:
 
 def count_thin_walls(solid: TopoDS_Shape, thin_mm: float = THIN_WALL_MM) -> int:
     faces = [TopoDS.Face(shape) for shape in unique_subshapes(solid, TopAbs_FACE)]
+    if len(faces) > MAX_FACES_FOR_THIN_WALLS:
+        return 0
     boxes = [_box(face) for face in faces]
     cones = {i: shape for i, face in enumerate(faces) if (shape := _cone_shape(face))}
     intersectors: dict[int, IntCurvesFace_Intersector] = {}

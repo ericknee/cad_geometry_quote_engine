@@ -27,8 +27,6 @@ class Features(_Frozen):
     thin_wall_count: int = Field(ge=0)
     sa_to_volume_ratio: float = Field(ge=0)
     material_removal_ratio: float = Field(ge=0, le=1)
-    # Not computed yet: to be added once CNC machining costs are known.
-    complexity_score: float | None = Field(default=None, ge=1.0, le=3.0)
 
 
 class GeometryResult(_Frozen):

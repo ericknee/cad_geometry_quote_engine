@@ -6,6 +6,7 @@ from geometry.materials import DEFAULT_MATERIAL
 from geometry.models import BoundingBox, Features, GeometryResult
 from pricing import PricingConfig, lead_time, price
 from pricing.cost import effective_mrr
+from pricing.lead_time import complexity_buffer_days
 from pydantic import ValidationError
 
 GEAR = Path(__file__).resolve().parents[3] / "samples" / "vendra-gear.STEP"
@@ -18,7 +19,6 @@ def _geometry(
     area=14.212,
     holes=1,
     setups=2,
-    complexity=None,
     faces=99,
     edges=284,
     thin_walls=0,
@@ -41,7 +41,6 @@ def _geometry(
             thin_wall_count=thin_walls,
             sa_to_volume_ratio=1.0,
             material_removal_ratio=0.5,
-            complexity_score=complexity,
         ),
     )
 
@@ -144,13 +143,6 @@ def test_machine_rate_comes_from_the_material():
     )
 
 
-def test_complexity_score_does_not_change_the_price():
-    plain = price(_geometry(), 1)
-    harder = price(_geometry(complexity=2.0), 1)
-    assert harder.machine.cycle_minutes == plain.machine.cycle_minutes
-    assert harder.total_cost_per_unit == plain.total_cost_per_unit
-
-
 def test_invalid_quantity():
     with pytest.raises(ValueError):
         price(_geometry(), 0)
@@ -168,13 +160,29 @@ def test_lead_time_uses_full_cycle_hours():
     result = lead_time(geometry, 100)
     cycle_hours = price(geometry, 1).machine.cycle_minutes / 60
     assert result.total_machine_hours == pytest.approx(1.560 + cycle_hours * 100, abs=0.01)
+    # 29.0 h / 8 = 3.63 machine days -> 4; buffer = 3.63 x 0.5 x (99/100) = 1.80 -> 2
     assert result.work_days == 4
-    assert result.days == 5 + 4 + 0
+    assert result.complexity_buffer_days == 2
+    assert result.days == 5 + 4 + 2
 
 
-def test_lead_time_small_order_is_minimum_plus_one_day():
+def test_lead_time_small_order_is_minimum_plus_work_plus_buffer():
     result = lead_time(_geometry(), 1)
-    assert (result.work_days, result.days) == (1, 6)
+    # 1.83 h -> 1 work day; buffer 0.23 x 0.5 x 0.99 = 0.11 -> rounds up to 1 whole day
+    assert (result.work_days, result.complexity_buffer_days, result.days) == (1, 1, 7)
+
+
+def test_buffer_scales_with_faces_and_stops_at_the_full_face_count():
+    # 100 machine days: 10 faces -> 100 x 0.5 x 0.1 = 5; 100 or more faces -> 100 x 0.5 = 50
+    config = PricingConfig()
+    assert complexity_buffer_days(10, 100.0, config) == 5
+    assert complexity_buffer_days(100, 100.0, config) == 50
+    assert complexity_buffer_days(500, 100.0, config) == 50
+    assert complexity_buffer_days(10, 0.1, config) == 1  # rounds up, never a fraction
+
+
+def test_buffer_is_zero_with_no_buffer_rate():
+    assert lead_time(_geometry(), 1, PricingConfig(max_buffer_rate=0)).complexity_buffer_days == 0
 
 
 def test_lead_time_exact_day_boundary_does_not_round_up():
@@ -190,9 +198,9 @@ def test_lead_time_exact_day_boundary_does_not_round_up():
     assert lead_time(geometry, 1, config).work_days == 1
 
 
-def test_config_rejects_bad_tables():
+def test_config_rejects_min_mrr_above_base_mrr():
     with pytest.raises(ValidationError):
-        PricingConfig(complexity_buffer_bands=((1.5, 0),))
+        PricingConfig(roughing_cm3_per_min=10.0, min_roughing_cm3_per_min=20.0)
 
 
 def test_thin_walls_lower_the_mrr_from_50_to_20_over_0_to_8_walls():
@@ -219,3 +227,9 @@ def test_minimum_mrr_must_not_exceed_the_base_rate():
 
 def test_gear_quote_is_inside_the_calibration_target():
     assert 190 <= price(analyze_file(GEAR), 1).total_cost_per_unit <= 195
+
+
+def test_edge_time_is_capped():
+    config = PricingConfig()
+    many = price(_geometry(edges=100_000), 1, config)
+    assert many.machine.edge_minutes == config.max_edge_minutes

@@ -107,11 +107,15 @@ time is unverified. The bracket is about $168 at quantity 1. `pricing_version` i
 
 ## Lead time formula
 
-- `lead time = 5 + ceil(total machine hours / 8) + complexity buffer`, in business days, where
-  total machine hours = setup hours + cycle hours x quantity.
+- `lead time = 5 + ceil(machine days) + complexity buffer`, in whole business days, where
+  machine days = (setup hours + cycle hours x quantity) / 8.
 - The 5-day minimum covers queue, material, QA and shipping prep, between the competitor's Standard
-  (4 days) and Economy (7 days). The buffer is 0 until the complexity score exists.
-- Sample gear: 6 days at quantity 1 and 10, 9 days at quantity 100.
+  (4 days) and Economy (7 days).
+- Complexity buffer = `ceil(machine days x 0.5 x min(faces / 100, 1))`. It is a safety margin for
+  programming, fixturing and inspection, not cutting time, so it does not change the price. More
+  faces means more tool paths to program and inspect. Machine days and the buffer are each rounded
+  up, so the breakdown never shows fractional days.
+- Sample gear: 7 days at quantity 1 and 10, 11 days at quantity 100.
 
 ## Assumptions
 
@@ -125,8 +129,8 @@ time is unverified. The bracket is about $168 at quantity 1. `pricing_version` i
 
 ## Future improvements
 
-- Implement the complexity score (edge density, SA:V, face density), which also activates the
-  lead-time buffer.
+- Improve the lead-time buffer beyond face count: add setups and thin walls, and calibrate the
+  100-face cap and 50% rate against real shop lead times (they come from two samples).
 - Check the price against competitor quotes at quantity 10 and 100 and refit the setup versus
   cutting-time split.
 - Replace the per-edge time with total edge length divided by a contour feed rate. A count misleads:

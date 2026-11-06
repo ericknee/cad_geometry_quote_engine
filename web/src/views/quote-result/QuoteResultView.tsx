@@ -6,8 +6,8 @@ import { describeError } from "@/api/errors";
 import { usePollQuote } from "@/hooks/usePollQuote";
 import { IN_PROGRESS_STATUSES, type QuoteDetail } from "@/types";
 import CalculationDetails from "./CalculationDetails";
-import ComplexityPanel from "./ComplexityPanel";
 import CostBreakdown from "./CostBreakdown";
+import FeaturesPanel from "./FeaturesPanel";
 import GeometryPanel from "./GeometryPanel";
 import HeadlinePrice from "./HeadlinePrice";
 import QuoteHeader from "./QuoteHeader";
@@ -46,7 +46,7 @@ export default function QuoteResultView({ id }: { id: string }) {
               <CostBreakdown cost={quote.cost_breakdown} />
             </div>
             {quote.geometry && <GeometryPanel geometry={quote.geometry} />}
-            {quote.geometry && <ComplexityPanel features={quote.geometry.features} />}
+            {quote.geometry && <FeaturesPanel features={quote.geometry.features} />}
           </div>
           <CalculationDetails cost={quote.cost_breakdown} leadTime={quote.lead_time} />
         </>

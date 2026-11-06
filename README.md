@@ -93,8 +93,7 @@ Output for the sample gear (formatted here for reading):
     "setups": 2,
     "thin_wall_count": 1,
     "sa_to_volume_ratio": 7.28,
-    "material_removal_ratio": 0.873,
-    "complexity_score": null
+    "material_removal_ratio": 0.873
   },
   "solids": 1,
   "warnings": []
@@ -108,7 +107,7 @@ Output for the sample gear (formatted here for reading):
 3. Click **Generate Quote**. The page shows a loading state while the worker analyzes the file
    (about a second for the gear).
 4. The quote page shows the per-unit price, order total, lead time, cost breakdown, geometry and
-   complexity details.
+   feature details.
 5. Open the dashboard at http://localhost:3000/quotes to see the stored quote, filter by status and
    change a quote's status.
 
@@ -208,10 +207,12 @@ http://localhost:8000/docs (dev only).
 - **Setup hours** are `programming (0.10 + 0.19 x log2(faces)) + 0.10 x setups`. Loading and unloading
   is part of the fixturing hours, so there is no separate handling term. The 0.19 is the one fitted
   number (see Known limitations); the other two are assumptions.
-- The complexity score and the surface-area-to-volume ratio are not used in the price.
+- The surface-area-to-volume ratio is not used in the price.
 - The material (density, price, machine rate) comes from `backend/geometry/materials.py`, which holds
   one entry, 6061 aluminum. `--material` on the geometry CLI picks it.
-- Lead time is `5 + ceil(machine hours / 8) + complexity buffer`, in business days.
+- Lead time is `5 + ceil(machine days) + complexity buffer`, in whole business days, where machine
+  days = machine hours / 8 and the buffer is `ceil(machine days x 0.5 x min(faces / 100, 1))`.
+  Both rates are assumptions (see `PricingConfig`).
 - **No finish assumed:** parts are priced as machined, with no finishing pass, so surface area does not
   drive cost. Standard tolerance; no threads, coatings or inspection reports.
 - Quotes are processed asynchronously by a worker, so the API replies `202` and the client polls.
@@ -225,10 +226,10 @@ The formulas and the reasoning for each are in `REPORT.md`; decisions and altern
 
 ## Known limitations
 
-- **No complexity score.** `complexity_score` is `null` and is not used in the price; the lead-time
-  complexity buffer is 0 days. The price is driven by removed volume, hole count, edge count,
-  thin-wall count, setup count and face count. The surface-area-to-volume ratio is measured but does
-  not change the price.
+- **No complexity score.** The lead-time complexity
+  buffer uses face count only, so it ignores setups and thin walls. The price is driven by removed
+  volume, hole count, edge count, thin-wall count, setup count and face count. The
+  surface-area-to-volume ratio is measured but does not change the price.
 - **Pricing is fitted to one data point.** `pricing_version` is `v2-draft`. One setup constant
   (`programming_hours_per_log2_face` = 0.19) was fitted so the sample gear at qty 1 ($193.44) lands in
   the competitors' roughly $190-$196; every other constant is an assumption. There are no competitor
