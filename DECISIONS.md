@@ -193,10 +193,63 @@ Status: **Built** (in the code), **Decided** (agreed, not built yet).
 - **Uploads stored outside any web root; the database stores path and SHA-256** — Built
   - Origin: PRD security requirement.
 
-## 6. Frontend — not started
+## 6. Frontend (`web`) — In progress
 
-- Stack from the PRD: Next.js (App Router), TypeScript, Tailwind.
-- The result page will poll while a quote is `queued` or `processing` and show the error for `failed`.
+Stack from the PRD: Next.js (App Router), TypeScript, Tailwind. Shared UI is in `src/components/`; each page has its own folder in `src/views/`.
+
+- **The New Quote page polls and only redirects when the quote is ready** — Built
+  - After the 202, the page polls `GET /quotes/{id}` (shared `usePollQuote` hook), shows "Analyzing your part...", and redirects to `/quotes/[id]` on success. A `failed` quote shows its error inline and keeps the chosen file so the user can retry.
+  - Alternative: redirect right after the upload and analyze on the result page (one polling place, but a bad file only shows up after leaving the form).
+  - Why: the PRD (§7.6) puts the loading state and inline errors on the New Quote page. The result page uses the same hook for direct links.
+  - Origin: proposed by the AI assistant after the owner asked it to check the frontend against the PRD; the owner chose it.
+- **Dashboard hides archived quotes by default, with a "Show archived" toggle** — Built
+  - The API cannot exclude a status, so `GET /quotes` got an optional `exclude_archived` flag. It defaults to false, and an explicit `status` wins over it.
+  - Alternatives: filter in the browser (pages come back short and `total` is wrong); one request per status (five requests per load, messy paging).
+  - Note: the owner chose to hide by default and to add the backend flag, and kept it when asked again whether to drop it.
+  - Picking a status in the dropdown shows exactly that status, so the toggle is disabled then (the API gives `status` priority).
+- **List sort order: `sort=newest|oldest` on `GET /quotes`** — Built
+  - Default is newest, so existing behavior is unchanged. `_id` breaks ties in the same direction so pages stay stable.
+  - Why: the PRD (§7.6) says the dashboard sorts by date, but the API only had newest-first.
+  - Note: the owner chose to add the parameter.
+- **Dashboard filters, sort and page live in the URL** — Built
+  - `/quotes?status=quoted&archived=1&sort=oldest&page=2`; defaults are left out. Filters survive a refresh and the back button, and a view can be shared as a link. Changing a filter goes back to page 1; a page past the end steps back to the last page.
+  - Alternative: component state (simpler, but filters reset on refresh or after viewing a quote).
+  - Note: the owner chose the URL.
+- **Dashboard refetches every 3 s only while a visible row is queued or processing** — Built
+  - So statuses and prices fill in without a reload, and an idle dashboard makes no requests.
+  - Alternative: manual refresh only (rows stay stale until reload).
+  - Note: the owner chose auto-refresh.
+- **Status controls offer only the moves the API allows** — Built
+  - One table in `statusMoves.ts` (from the rules in section 4) drives the buttons on both the dashboard rows and the result page. A row shows only the buttons that are valid for it, next to View.
+  - The dashboard's Status column is the first column and read-only (a badge); status changes happen only through the action buttons.
+  - Note: the owner chose buttons over an inline dropdown.
+  - Archive asks for confirmation. After a change the page stays on the result and shows the new status (the owner chose this over going to the dashboard).
+  - If the API answers `STATUS_CONFLICT` (someone else changed the quote), the page shows the message and reloads the quote so the buttons match.
+  - PRD deviation: the PRD shows a free status dropdown and says any status may move to `archived`.
+- **API types are copied by hand into `web/src/types.ts`** — Built
+  - Alternative: generate them from the OpenAPI schema (no drift, but needs a tool and a build step).
+  - Origin: proposed by the AI assistant to keep the setup small. Risk: the copy can drift if the backend models change.
+- **The cost breakdown bar is plain CSS, not a chart library** — Built
+  - It is one bar with three segments, so a library would add a dependency for no gain.
+  - Origin: proposed by the AI assistant; the owner asked what the chart is for and confirmed it.
+- **The result page explains every number** — Built
+  - A "How this was calculated" section shows the intermediate values the API returns (stock and removed volume, computed material cost before the minimum, cycle minutes, discount rate, setup hours, lead-time terms, `pricing_version`).
+  - Why: PRD FR-P6 and §9 require every number in a quote to be traceable.
+  - Origin: found when the AI assistant checked the plan against the PRD.
+- **The complexity score shows "N/A" while it is null** — Built
+  - The geometry engine does not compute it yet, and pricing uses a placeholder of 1.0.
+  - Note: the owner chose "N/A".
+- **Theme: semantic color tokens in `globals.css`, plus shared primitives** — Built
+  - Colors are named by role (`surface`, `fg-muted`, `primary`, `danger`...) as CSS variables mapped through Tailwind's `@theme inline`, so components write `bg-surface text-fg-muted` and never a hue. Shared pieces (`Button`, `Select`, `TextInput`, `Alert`, `Card`, `StatusBadge`) hold the repeated class strings, so a look change is one edit.
+  - Alternatives: raw palette classes plus `dark:` variants (two class sets on every element, easy to miss one); `@apply` component classes (hides styling from components); a component library such as shadcn/ui (more tooling than a three-page app needs).
+  - Base palette from the owner: `#BBBFBF`, `#878787`, `#05AD98`, `#FFFFFF`. One theme, no dark mode; a new theme is another block of variable values (`[data-theme="..."]`), so none of the components change.
+  - A lint rule rejects raw palette classes (`bg-red-500`, `text-white`...) in `src/`, so the tokens stay the single source of colors.
+  - Origin: the AI assistant proposed the options; the owner chose tokens plus primitives, the palette, and one theme.
+- **Teal is split into a darker button color and a bright accent** — Built
+  - `#05AD98` with white text is only 2.8:1 (WCAG AA needs 4.5:1 for normal text). Buttons use `#037F70` (4.9:1 with white); the bright `#05AD98` is kept for the focus ring and highlights. Muted text is `#5F6363` (6:1); `#878787` is used only for control outlines and icons, `#BBBFBF` only for dividers. Contrast of every token pair was computed, not eyeballed.
+  - Alternatives: bright teal with dark text (5.3:1); bright teal with white text (matches the brand exactly but fails AA).
+  - Note: the owner chose the darker teal with white text.
+- **Out of scope for now:** 3D preview, live re-pricing, quantity-vs-price curve, requote endpoint (PRD stretch items). Note: confirmed by the owner.
 
 ## 7. Process
 

@@ -25,6 +25,7 @@ from api.types.quotes_types import (
     QuoteList,
     QuoteStatus,
     QuoteSummary,
+    SortOrder,
 )
 from api.utils.file_storage import Upload, delete_file, save_upload
 from api.utils.geometry_runner import analyze_in_subprocess
@@ -89,10 +90,19 @@ class QuotesService:
             raise QuoteNotFound("Quote not found.")
         return QuoteDetail.model_validate(doc)
 
-    async def list_quotes(self, status: QuoteStatus | None, limit: int, skip: int) -> QuoteList:
+    async def list_quotes(
+        self,
+        status: QuoteStatus | None,
+        limit: int,
+        skip: int,
+        *,
+        exclude_archived: bool = False,
+        sort: SortOrder = SortOrder.NEWEST,
+    ) -> QuoteList:
         # The page and the total are independent queries, so run them together.
         docs, total = await asyncio.gather(
-            self._repo.list_page(status, limit, skip), self._repo.count(status)
+            self._repo.list_page(status, limit, skip, exclude_archived=exclude_archived, sort=sort),
+            self._repo.count(status, exclude_archived=exclude_archived),
         )
         items = [QuoteSummary.from_document(doc) for doc in docs]
         return QuoteList(items=items, total=total, limit=limit, skip=skip)

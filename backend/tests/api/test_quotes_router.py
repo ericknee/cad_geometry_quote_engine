@@ -94,9 +94,15 @@ def test_list_envelope_paging_and_filter(client):
     assert (body["total"], body["limit"], body["skip"]) == (3, 2, 0)
     assert client.get("/api/quotes", params={"skip": 2}).json()["items"][0]["id"] == ids[0]
     assert client.get("/api/quotes", params={"status": "quoted"}).json()["total"] == 0
+    oldest = client.get("/api/quotes", params={"sort": "oldest"}).json()
+    assert [i["id"] for i in oldest["items"]] == ids
+    # Nothing is archived yet, so the flag changes nothing; the service test covers hiding.
+    assert client.get("/api/quotes", params={"exclude_archived": "true"}).json()["total"] == 3
 
 
-@pytest.mark.parametrize("params", [{"limit": 0}, {"limit": 101}, {"skip": -1}, {"status": "x"}])
+@pytest.mark.parametrize(
+    "params", [{"limit": 0}, {"limit": 101}, {"skip": -1}, {"status": "x"}, {"sort": "x"}]
+)
 def test_list_rejects_bad_params(client, params):
     _assert_error(client.get("/api/quotes", params=params), 422, "VALIDATION_ERROR")
 
