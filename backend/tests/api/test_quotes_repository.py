@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from api.db.indexes import ensure_indexes
 from api.repositories.quotes_repository import QuotesRepository
-from api.types.quotes_types import ErrorDetail, QuoteStatus
+from api.types.quotes_types import ErrorDetail, QuoteStatus, QuoteSummary
 from bson import ObjectId
 from geometry.analyzer import analyze_file
 from pricing import lead_time, price
@@ -49,6 +49,25 @@ async def test_list_is_newest_first_filtered_and_paged(repo):
     assert await repo.count(QuoteStatus.PROCESSING) == 1
     queued = await repo.list_page(QuoteStatus.QUEUED, limit=10, skip=0)
     assert ids[0] not in [q["id"] for q in queued]
+
+
+async def test_list_returns_slim_documents_with_everything_a_summary_needs(repo):
+    await _insert(repo, quantity=10)
+    claimed = await repo.claim_next_queued()
+    geometry = analyze_file("samples/vendra-gear.STEP")
+    cost, lead = price(geometry, 10), lead_time(geometry, 10)
+    await repo.save_result(claimed["id"], geometry, cost, lead, attempt=1)
+
+    [row] = await repo.list_page(None, limit=10, skip=0)
+
+    assert "geometry" not in row and "lead_time" not in row and "file_path" not in row
+    assert set(row["cost_breakdown"]) == {"total_cost_per_unit", "total_order_cost"}
+    summary = QuoteSummary.from_document(row)
+    assert summary.total_cost_per_unit == cost.total_cost_per_unit
+    assert summary.total_order_cost == cost.total_order_cost
+    assert summary.lead_time_days == lead.days
+    # Every field the summary has must have come from the projection, not fallen back to None.
+    assert all(getattr(summary, name) is not None for name in QuoteSummary.model_fields)
 
 
 async def test_claim_takes_oldest_first_and_marks_processing(repo):

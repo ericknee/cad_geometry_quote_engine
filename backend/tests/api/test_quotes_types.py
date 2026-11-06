@@ -27,7 +27,7 @@ def test_queued_quote_has_no_results_yet():
     assert quote.geometry is None
     assert quote.cost_breakdown is None
     assert quote.lead_time_days is None
-    assert QuoteSummary.from_detail(quote).total_cost_per_unit is None
+    assert QuoteSummary.from_document(quote.model_dump()).total_cost_per_unit is None
 
 
 def test_summary_takes_prices_from_the_breakdown():
@@ -42,7 +42,7 @@ def test_summary_takes_prices_from_the_breakdown():
             "lead_time_days": lead.days,
         }
     )
-    summary = QuoteSummary.from_detail(quote)
+    summary = QuoteSummary.from_document(quote.model_dump())
     assert summary.total_cost_per_unit == cost.total_cost_per_unit
     assert summary.total_order_cost == cost.total_order_cost
     assert summary.lead_time_days == lead.days

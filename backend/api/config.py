@@ -22,3 +22,9 @@ class Settings(BaseSettings):
     analysis_timeout_seconds: int = 120
     stale_job_minutes: int = 5
     worker_poll_seconds: float = 1.0
+
+    @property
+    def upload_path(self) -> Path:
+        """Absolute upload folder. A relative UPLOAD_DIR would depend on the working directory,
+        and the API and the worker could end up looking in different places."""
+        return Path(self.upload_dir).resolve()

@@ -1,8 +1,9 @@
 """Request/response models for the quotes endpoints."""
 
+from collections.abc import Mapping
 from datetime import datetime
 from enum import StrEnum
-from typing import Self
+from typing import Any, Self
 
 from geometry.models import GeometryResult
 from pricing.models import CostBreakdown, LeadTime
@@ -72,18 +73,20 @@ class QuoteSummary(_Frozen):
     updated_at: datetime
 
     @classmethod
-    def from_detail(cls, quote: QuoteDetail) -> Self:
-        cost = quote.cost_breakdown
+    def from_document(cls, doc: Mapping[str, Any]) -> Self:
+        """Build a row from a stored quote (a full one or the slim list projection), so the
+        list never has to parse geometry. Only `cost_breakdown`'s two totals are read."""
+        cost = doc.get("cost_breakdown") or {}
         return cls(
-            id=quote.id,
-            file_name=quote.file_name,
-            quantity=quote.quantity,
-            status=quote.status,
-            total_cost_per_unit=cost.total_cost_per_unit if cost else None,
-            total_order_cost=cost.total_order_cost if cost else None,
-            lead_time_days=quote.lead_time_days,
-            created_at=quote.created_at,
-            updated_at=quote.updated_at,
+            id=doc["id"],
+            file_name=doc["file_name"],
+            quantity=doc["quantity"],
+            status=doc["status"],
+            total_cost_per_unit=cost.get("total_cost_per_unit"),
+            total_order_cost=cost.get("total_order_cost"),
+            lead_time_days=doc.get("lead_time_days"),
+            created_at=doc["created_at"],
+            updated_at=doc["updated_at"],
         )
 
 

@@ -13,11 +13,19 @@ from pricing.models import CostBreakdown, LeadTime
 from pymongo import ASCENDING, DESCENDING, ReturnDocument
 from pymongo.asynchronous.database import AsyncDatabase
 
-from api.types.quotes_types import ErrorDetail, QuoteStatus
+from api.types.quotes_types import ErrorDetail, QuoteStatus, QuoteSummary
 
 COLLECTION = "quotes"
 
 Document = dict[str, Any]
+
+# Fields of a dashboard row. Taken from QuoteSummary so a new field is fetched automatically;
+# its two prices live inside cost_breakdown, so only those are fetched (_id comes by default).
+_COST_FIELDS = ("total_cost_per_unit", "total_order_cost")
+_SUMMARY_PROJECTION: dict[str, int] = {
+    **{name: 1 for name in QuoteSummary.model_fields if name != "id" and name not in _COST_FIELDS},
+    **{f"cost_breakdown.{name}": 1 for name in _COST_FIELDS},
+}
 
 
 def _now() -> datetime:
@@ -71,9 +79,11 @@ class QuotesRepository:
         return _to_document(await self._quotes.find_one({"_id": oid}))
 
     async def list_page(self, status: QuoteStatus | None, limit: int, skip: int) -> list[Document]:
+        """One page of quotes, newest first. Slim documents: only what a QuoteSummary needs
+        (see _SUMMARY_PROJECTION), so the large geometry is never sent. Use find_by_id for all."""
         # _id breaks ties so pages stay stable when several quotes share a timestamp.
         cursor = (
-            self._quotes.find(_status_filter(status))
+            self._quotes.find(_status_filter(status), _SUMMARY_PROJECTION)
             .sort([("created_at", DESCENDING), ("_id", DESCENDING)])
             .skip(skip)
             .limit(limit)
