@@ -12,6 +12,15 @@ export type QuoteStatus =
   | "reviewed"
   | "archived";
 
+export const ALL_STATUSES: readonly QuoteStatus[] = [
+  "queued",
+  "processing",
+  "failed",
+  "quoted",
+  "reviewed",
+  "archived",
+];
+
 /** Statuses still being worked on by the worker; the client polls while the quote is in one. */
 export const IN_PROGRESS_STATUSES: readonly QuoteStatus[] = ["queued", "processing"];
 

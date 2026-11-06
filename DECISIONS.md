@@ -202,15 +202,24 @@ Stack from the PRD: Next.js (App Router), TypeScript, Tailwind. Shared UI is in 
   - Alternative: redirect right after the upload and analyze on the result page (one polling place, but a bad file only shows up after leaving the form).
   - Why: the PRD (§7.6) puts the loading state and inline errors on the New Quote page. The result page uses the same hook for direct links.
   - Origin: proposed by the AI assistant after the owner asked it to check the frontend against the PRD; the owner chose it.
-- **Dashboard hides archived quotes by default, with a "Show archived" toggle** — Planned (API flag built)
+- **Dashboard hides archived quotes by default, with a "Show archived" toggle** — Built
   - The API cannot exclude a status, so `GET /quotes` got an optional `exclude_archived` flag. It defaults to false, and an explicit `status` wins over it.
   - Alternatives: filter in the browser (pages come back short and `total` is wrong); one request per status (five requests per load, messy paging).
-  - Note: the owner chose to hide by default and to add the backend flag.
-- **List sort order: `sort=newest|oldest` on `GET /quotes`** — Built (API); UI planned
+  - Note: the owner chose to hide by default and to add the backend flag, and kept it when asked again whether to drop it.
+  - Picking a status in the dropdown shows exactly that status, so the toggle is disabled then (the API gives `status` priority).
+- **List sort order: `sort=newest|oldest` on `GET /quotes`** — Built
   - Default is newest, so existing behavior is unchanged. `_id` breaks ties in the same direction so pages stay stable.
   - Why: the PRD (§7.6) says the dashboard sorts by date, but the API only had newest-first.
   - Note: the owner chose to add the parameter.
-- **Status controls offer only the moves the API allows** — Built (result page); dashboard planned
+- **Dashboard filters, sort and page live in the URL** — Built
+  - `/quotes?status=quoted&archived=1&sort=oldest&page=2`; defaults are left out. Filters survive a refresh and the back button, and a view can be shared as a link. Changing a filter goes back to page 1; a page past the end steps back to the last page.
+  - Alternative: component state (simpler, but filters reset on refresh or after viewing a quote).
+  - Note: the owner chose the URL.
+- **Dashboard refetches every 3 s only while a visible row is queued or processing** — Built
+  - So statuses and prices fill in without a reload, and an idle dashboard makes no requests.
+  - Alternative: manual refresh only (rows stay stale until reload).
+  - Note: the owner chose auto-refresh.
+- **Status controls offer only the moves the API allows** — Built
   - One table in `statusMoves.ts` (from the rules in section 4) drives the dashboard dropdown and the result-page buttons. Rows with no valid move show a plain badge.
   - Archive asks for confirmation. After a change the page stays on the result and shows the new status (the owner chose this over going to the dashboard).
   - If the API answers `STATUS_CONFLICT` (someone else changed the quote), the page shows the message and reloads the quote so the buttons match.
