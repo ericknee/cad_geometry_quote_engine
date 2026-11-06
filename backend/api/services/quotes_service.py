@@ -1,5 +1,6 @@
 """Quote workflow: validate, store file, analyze, price, save. Owns the rules."""
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
@@ -89,9 +90,12 @@ class QuotesService:
         return QuoteDetail.model_validate(doc)
 
     async def list_quotes(self, status: QuoteStatus | None, limit: int, skip: int) -> QuoteList:
-        docs = await self._repo.list_page(status, limit, skip)
-        items = [QuoteSummary.from_detail(QuoteDetail.model_validate(doc)) for doc in docs]
-        return QuoteList(items=items, total=await self._repo.count(status), limit=limit, skip=skip)
+        # The page and the total are independent queries, so run them together.
+        docs, total = await asyncio.gather(
+            self._repo.list_page(status, limit, skip), self._repo.count(status)
+        )
+        items = [QuoteSummary.from_document(doc) for doc in docs]
+        return QuoteList(items=items, total=total, limit=limit, skip=skip)
 
     async def update_status(self, quote_id: str, new: QuoteStatus) -> QuoteDetail:
         """A reviewer's status change, limited to ALLOWED_TRANSITIONS."""
@@ -99,6 +103,8 @@ class QuotesService:
         if quote is None:
             raise QuoteNotFound("Quote not found.")
         current = QuoteStatus(quote["status"])
+        if current is new and new in ALLOWED_TRANSITIONS:
+            return QuoteDetail.model_validate(quote)  # already there: a retried request is a no-op
         if current not in ALLOWED_TRANSITIONS.get(new, frozenset()):
             raise InvalidStatusTransition(f"A {current.value} quote cannot be set to {new.value}.")
         updated = await self._repo.transition_status(quote_id, current, new)
@@ -107,7 +113,20 @@ class QuotesService:
             if await self._repo.find_by_id(quote_id) is None:
                 raise QuoteNotFound("Quote not found.")
             raise StatusConflict("The quote changed while you were updating it. Reload and retry.")
+        if new is QuoteStatus.ARCHIVED:
+            self._discard_file(quote_id, quote["file_path"])
         return QuoteDetail.model_validate(updated)
+
+    @staticmethod
+    def _discard_file(quote_id: str, file_path: str) -> None:
+        """Archiving ends the quote, so its STEP file is no longer needed. Best effort: a file
+        that cannot be removed is logged and left behind, it must not fail the status change.
+        Failed quotes keep their file so they can be retried. The path and hash stay in the
+        database."""
+        try:
+            delete_file(file_path)
+        except OSError:
+            logger.exception("Quote %s: could not delete %s", quote_id, file_path)
 
     @property
     def _max_attempts(self) -> int:

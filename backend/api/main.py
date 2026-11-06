@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -11,12 +11,19 @@ from api.db.database import check_connection, create_client, get_database
 from api.db.indexes import ensure_indexes
 from api.errors.quotes_errors import QuoteError
 from api.routers.quotes_router import router as quotes_router
+from api.utils.body_limit import BodyLimitMiddleware
 
 API_PREFIX = "/api"
 
 
-def _error_response(status: int, code: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status, content={"error": {"code": code, "message": message}})
+def _error_response(
+    status: int, code: str, message: str, headers: Mapping[str, str] | None = None
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status,
+        content={"error": {"code": code, "message": message}},
+        headers=dict(headers) if headers else None,
+    )
 
 
 def _validation_message(error: RequestValidationError) -> str:
@@ -50,6 +57,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url=None if prod else "/openapi.json",
     )
     app.state.settings = settings
+    app.add_middleware(BodyLimitMiddleware, max_bytes=settings.max_upload_mb * 1024 * 1024)
 
     # Every error leaves the API in one shape: { "error": { "code", "message" } }.
     @app.exception_handler(QuoteError)
@@ -62,7 +70,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error_handler(_: Request, error: StarletteHTTPException) -> JSONResponse:
-        return _error_response(error.status_code, f"HTTP_{error.status_code}", str(error.detail))
+        # Keep the error's own headers, e.g. `Allow` on a 405.
+        return _error_response(
+            error.status_code, f"HTTP_{error.status_code}", str(error.detail), error.headers
+        )
 
     @app.get(f"{API_PREFIX}/health")
     async def health() -> dict[str, bool]:

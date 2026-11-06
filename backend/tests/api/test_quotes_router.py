@@ -55,6 +55,17 @@ def test_create_rejects_quantity_out_of_range(client, quantity):
     _assert_error(_upload(client, quantity=quantity), 422, "INVALID_QUANTITY")
 
 
+def test_oversized_request_is_rejected_before_the_file_is_saved(mongo_db, tmp_path):
+    settings = Settings(
+        mongodb_db=mongo_db.name, upload_dir=str(tmp_path / "uploads"), max_upload_mb=1
+    )
+    with TestClient(create_app(settings)) as small_client:
+        too_big = _upload(small_client, content=b"x" * (1024 * 1024 + 128 * 1024))
+        _assert_error(too_big, 413, "FILE_TOO_LARGE")
+        assert not list((tmp_path / "uploads").glob("*"))  # nothing was stored
+        assert _upload(small_client).status_code == 202  # a normal request still works
+
+
 def test_create_rejects_non_integer_quantity(client):
     _assert_error(_upload(client, quantity="abc"), 422, "VALIDATION_ERROR")
 

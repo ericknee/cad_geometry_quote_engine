@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from api.config import Settings
 from api.errors.quotes_errors import (
@@ -113,10 +115,49 @@ async def test_allowed_transitions(service, repo, current, new):
 async def test_every_other_transition_is_rejected(service, repo, current, new):
     if current in ALLOWED_TRANSITIONS.get(new, ()):
         pytest.skip("allowed")
+    if current is new and new in ALLOWED_TRANSITIONS:
+        pytest.skip("idempotent, see test_repeating_a_reviewer_status_is_a_no_op")
     quote_id = await _quote_with_status(repo, current)
     with pytest.raises(InvalidStatusTransition):
         await service.update_status(quote_id, new)
     assert (await service.get_quote(quote_id)).status is current
+
+
+@pytest.mark.parametrize("status", list(ALLOWED_TRANSITIONS))
+async def test_repeating_a_reviewer_status_is_a_no_op(service, repo, status):
+    quote_id = await _quote_with_status(repo, status)
+    assert (await service.update_status(quote_id, status)).status is status
+
+
+async def test_archiving_deletes_the_file_but_keeps_the_record(service, repo):
+    quote = await service.create_quote(FakeUpload("a.step", STEP), 1)
+    stored = await repo.find_by_id(quote.id)
+    await repo._quotes.update_one({"_id": ObjectId(quote.id)}, {"$set": {"status": "quoted"}})
+    assert Path(stored["file_path"]).exists()
+
+    await service.update_status(quote.id, QuoteStatus.ARCHIVED)
+
+    assert not Path(stored["file_path"]).exists()
+    assert (await repo.find_by_id(quote.id))["file_hash"] == stored["file_hash"]
+
+
+async def test_reviewing_keeps_the_file(service, repo):
+    quote = await service.create_quote(FakeUpload("a.step", STEP), 1)
+    path = Path((await repo.find_by_id(quote.id))["file_path"])
+    await repo._quotes.update_one({"_id": ObjectId(quote.id)}, {"$set": {"status": "quoted"}})
+    await service.update_status(quote.id, QuoteStatus.REVIEWED)
+    assert path.exists()
+
+
+async def test_archiving_survives_a_file_that_cannot_be_deleted(service, repo, monkeypatch):
+    def boom(_path):
+        raise PermissionError("locked")
+
+    monkeypatch.setattr("api.services.quotes_service.delete_file", boom)
+    quote_id = await _quote_with_status(repo, QuoteStatus.QUOTED)
+    assert (
+        await service.update_status(quote_id, QuoteStatus.ARCHIVED)
+    ).status is QuoteStatus.ARCHIVED
 
 
 async def test_update_status_not_found(service):
