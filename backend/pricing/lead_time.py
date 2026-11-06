@@ -1,4 +1,4 @@
-"""Lead time in business days (PRD 7.3). Uses undiscounted hours: discounts never shorten it."""
+"""Lead time in business days (PRD 7.3)."""
 
 import math
 
@@ -29,13 +29,18 @@ def lead_time(
     config = config or PricingConfig()
 
     cycle = cycle_time(geometry, config)
-    setup = setup_hours(geometry.features.setups, config)
+    setup = setup_hours(geometry, config)
     total_hours = setup + cycle.minutes / 60 * quantity
 
     work_days = math.ceil(
         round(total_hours / config.productive_hours_per_day, _FLOAT_NOISE_DECIMALS)
     )
-    buffer_days = complexity_buffer_days(cycle.complexity_score, config)
+    # Lead time still reads the geometry's complexity score (None until it is implemented);
+    # the price does not use it.
+    score = geometry.features.complexity_score
+    buffer_days = complexity_buffer_days(
+        config.default_complexity_score if score is None else score, config
+    )
     return LeadTime(
         total_machine_hours=round(total_hours, _HOURS_DECIMALS),
         productive_hours_per_day=config.productive_hours_per_day,

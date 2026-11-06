@@ -61,7 +61,6 @@ async def test_success_prices_and_stores_the_quote(repo):
     assert quote["status"] == "quoted"
     assert quote["attempts"] == 1
     assert quote["cost_breakdown"]["quantity"] == 10
-    assert quote["cost_breakdown"]["discount"]["rate"] == 0.10
     assert quote["lead_time_days"] == quote["lead_time"]["days"]
 
 
@@ -134,4 +133,4 @@ async def test_end_to_end_with_a_real_child_process(repo):
 
     quote = await repo.find_by_id(quote_id)
     assert quote["status"] == "quoted"
-    assert quote["cost_breakdown"]["total_cost_per_unit"] == pytest.approx(204.38, abs=0.01)
+    assert quote["cost_breakdown"]["total_cost_per_unit"] == pytest.approx(193.44, abs=0.02)

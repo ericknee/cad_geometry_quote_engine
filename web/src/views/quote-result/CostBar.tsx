@@ -8,7 +8,7 @@ const SEGMENTS = [
   { key: "setup", label: "Setup", color: "bg-chart-setup" },
 ] as const;
 
-/** One stacked bar of the per-unit cost before the quantity discount. */
+/** One stacked bar of the per-unit cost. */
 export default function CostBar({ cost }: { cost: CostBreakdown }) {
   const values = {
     material: cost.material.cost_unit,
@@ -41,7 +41,6 @@ export default function CostBar({ cost }: { cost: CostBreakdown }) {
           </li>
         ))}
       </ul>
-      <p className="mt-1 text-xs text-fg-muted">Per unit, before the quantity discount.</p>
     </div>
   );
 }

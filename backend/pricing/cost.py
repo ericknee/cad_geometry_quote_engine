@@ -4,8 +4,10 @@ Everything is computed unrounded; money and intermediates are rounded only when 
 models are built, so rounding never feeds into another calculation.
 """
 
+import math
 from dataclasses import dataclass
 
+from geometry.materials import get_material
 from geometry.models import GeometryResult
 
 from pricing.config import PricingConfig
@@ -13,7 +15,6 @@ from pricing.models import (
     CostBreakdown,
     MachineCost,
     MaterialCost,
-    QuantityDiscount,
     SetupCost,
 )
 
@@ -23,51 +24,46 @@ _QUANTITY_DECIMALS = 3  # minutes, hours, volumes
 
 @dataclass(frozen=True)
 class Cycle:
-    """Unrounded machine time for one part, before any discount."""
+    """Unrounded machine time for one part."""
 
     roughing_minutes: float
-    finishing_minutes: float
     hole_minutes: float
-    handling_minutes: float
-    complexity_score: float
+    edge_minutes: float
+    mrr_cm3_per_min: float
 
     @property
     def minutes(self) -> float:
-        base = (
-            self.roughing_minutes
-            + self.finishing_minutes
-            + self.hole_minutes
-            + self.handling_minutes
-        )
-        return base * self.complexity_score
+        return self.roughing_minutes + self.hole_minutes + self.edge_minutes
 
 
 def cycle_time(geometry: GeometryResult, config: PricingConfig) -> Cycle:
     """FR-P2. Shared with the lead-time model."""
     features = geometry.features
     removed = max(0.0, geometry.stock_volume_cm3 - geometry.volume_cm3)
-    score = features.complexity_score
+    mrr = effective_mrr(features.thin_wall_count, config)
     return Cycle(
-        roughing_minutes=removed / config.roughing_cm3_per_min,
-        finishing_minutes=geometry.surface_area_cm2 / config.finishing_cm2_per_min,
+        roughing_minutes=removed / mrr,
         hole_minutes=features.holes_detected * config.minutes_per_hole,
-        handling_minutes=config.handling_minutes,
-        complexity_score=config.default_complexity_score if score is None else score,
+        edge_minutes=features.edge_count * config.minutes_per_edge,
+        mrr_cm3_per_min=mrr,
     )
 
 
-def setup_hours(setups: int, config: PricingConfig) -> float:
-    """FR-P4. Each setup after the first adds a fixed share of the base time."""
-    return config.base_setup_hours * (1 + config.setup_extra_per_setup * (setups - 1))
+def effective_mrr(thin_walls: int, config: PricingConfig) -> float:
+    """MRR in cm3/min: falls linearly from the base rate to the minimum as thin walls rise."""
+    share = min(thin_walls, config.thin_walls_for_min_mrr) / config.thin_walls_for_min_mrr
+    base, minimum = config.roughing_cm3_per_min, config.min_roughing_cm3_per_min
+    return base - (base - minimum) * share
 
 
-def discount_rate(quantity: int, config: PricingConfig) -> float:
-    """FR-P3. The tier with the largest minimum quantity not above `quantity`."""
-    rate = 0.0
-    for minimum, tier_rate in config.discount_tiers:
-        if quantity >= minimum:
-            rate = tier_rate
-    return rate
+def setup_hours(geometry: GeometryResult, config: PricingConfig) -> float:
+    """FR-P4. One-time hours per order: CAM programming and fixturing."""
+    faces = geometry.features.face_count
+    programming = config.programming_base_hours + config.programming_hours_per_log2_face * (
+        math.log2(faces) if faces > 0 else 0.0
+    )
+    fixturing = config.fixture_hours_per_setup * geometry.features.setups
+    return programming + fixturing
 
 
 def _money(value: float) -> float:
@@ -84,28 +80,29 @@ def price(
     if quantity < 1:
         raise ValueError("quantity must be at least 1")
     config = config or PricingConfig()
-    rate_per_minute = config.machine_rate_per_hour / 60
+    material = get_material(geometry.material)
+    rate_per_hour = material.machining_hourly_rate_cents / 100
+    rate_per_minute = rate_per_hour / 60
 
     # Material (FR-P1): priced on stock, not the finished part, with a minimum charge.
-    computed_material = (
-        geometry.stock_volume_cm3 * config.density_g_per_cm3 / 1000 * config.material_price_per_kg
-    )
-    material_unit = max(computed_material, config.min_material_charge)
+    computed_material = geometry.stock_mass_kg * material.price_per_kg
+    # The minimum applies to the whole order: shops buy one bar for all the parts.
+    computed_material_order = computed_material * quantity
+    material_order = max(computed_material_order, config.min_material_charge)
+    material_unit = material_order / quantity
 
-    # Machine (FR-P2). Never reduced by the quantity discount.
+    # Machine (FR-P2). Per-part time does not change with quantity.
     cycle = cycle_time(geometry, config)
     machine_unit = cycle.minutes * rate_per_minute
 
-    # Setup (FR-P4): one cost for the whole order, shared across the parts.
+    # Setup (FR-P4): one-time programming and fixturing, shared across the parts. This is the
+    # only quantity effect: the per-unit price falls as the order grows.
     setups = geometry.features.setups
-    setup_order = setup_hours(setups, config) * config.machine_rate_per_hour
+    hours = setup_hours(geometry, config)
+    setup_order = hours * rate_per_hour
     setup_unit = setup_order / quantity
 
-    # Discount (FR-P3/P5): taken off the machine cost, shown as its own line.
-    rate = discount_rate(quantity, config)
-    discount_unit = machine_unit * rate
-
-    total_unit = material_unit + machine_unit + setup_unit - discount_unit
+    total_unit = material_unit + machine_unit + setup_unit
 
     return CostBreakdown(
         quantity=quantity,
@@ -115,31 +112,27 @@ def price(
             part_volume_cm3=_amount(geometry.volume_cm3),
             removed_volume_cm3=_amount(max(0.0, geometry.stock_volume_cm3 - geometry.volume_cm3)),
             computed_cost_unit=_money(computed_material),
+            computed_cost_order=_money(computed_material_order),
             minimum_charge=_money(config.min_material_charge),
-            minimum_applied=computed_material < config.min_material_charge,
+            minimum_applied=computed_material_order < config.min_material_charge,
             cost_unit=_money(material_unit),
-            cost_order=_money(material_unit * quantity),
+            cost_order=_money(material_order),
         ),
         machine=MachineCost(
             roughing_minutes=_amount(cycle.roughing_minutes),
-            finishing_minutes=_amount(cycle.finishing_minutes),
             hole_minutes=_amount(cycle.hole_minutes),
-            handling_minutes=_amount(cycle.handling_minutes),
-            complexity_score=cycle.complexity_score,
+            edge_minutes=_amount(cycle.edge_minutes),
+            thin_wall_count=geometry.features.thin_wall_count,
+            mrr_cm3_per_min=_amount(cycle.mrr_cm3_per_min),
             cycle_minutes=_amount(cycle.minutes),
             cost_unit=_money(machine_unit),
             cost_order=_money(machine_unit * quantity),
         ),
         setup=SetupCost(
             setups=setups,
-            setup_hours=_amount(setup_hours(setups, config)),
+            setup_hours=_amount(hours),
             cost_unit=_money(setup_unit),
             cost_order=_money(setup_order),
-        ),
-        discount=QuantityDiscount(
-            rate=rate,
-            amount_unit=_money(discount_unit),
-            amount_order=_money(discount_unit * quantity),
         ),
         total_cost_per_unit=_money(total_unit),
         total_order_cost=_money(total_unit * quantity),

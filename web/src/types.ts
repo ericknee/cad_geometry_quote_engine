@@ -41,6 +41,7 @@ export interface Features {
   cylindrical_faces: number;
   holes_detected: number;
   setups: number;
+  thin_wall_count: number;
   sa_to_volume_ratio: number;
   material_removal_ratio: number;
   complexity_score: number | null;
@@ -64,6 +65,7 @@ export interface MaterialCost {
   part_volume_cm3: number;
   removed_volume_cm3: number;
   computed_cost_unit: number;
+  computed_cost_order: number;
   minimum_charge: number;
   minimum_applied: boolean;
   cost_unit: number;
@@ -72,10 +74,10 @@ export interface MaterialCost {
 
 export interface MachineCost {
   roughing_minutes: number;
-  finishing_minutes: number;
   hole_minutes: number;
-  handling_minutes: number;
-  complexity_score: number;
+  edge_minutes: number;
+  thin_wall_count: number;
+  mrr_cm3_per_min: number;
   cycle_minutes: number;
   cost_unit: number;
   cost_order: number;
@@ -88,19 +90,12 @@ export interface SetupCost {
   cost_order: number;
 }
 
-export interface QuantityDiscount {
-  rate: number;
-  amount_unit: number;
-  amount_order: number;
-}
-
 export interface CostBreakdown {
   quantity: number;
   pricing_version: string;
   material: MaterialCost;
   machine: MachineCost;
   setup: SetupCost;
-  discount: QuantityDiscount;
   total_cost_per_unit: number;
   total_order_cost: number;
 }

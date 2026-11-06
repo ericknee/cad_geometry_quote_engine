@@ -10,6 +10,7 @@ from OCP.TopoDS import TopoDS, TopoDS_Shape
 from geometry.holes import find_hole_axes
 from geometry.setups import count_setups
 from geometry.topology import unique_subshapes
+from geometry.walls import count_thin_walls
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,7 @@ class SolidFeatures:
     cylindrical_faces: int
     holes_detected: int
     setups: int
+    thin_wall_count: int
 
 
 def extract_features(solid: TopoDS_Shape) -> SolidFeatures:
@@ -32,6 +34,7 @@ def extract_features(solid: TopoDS_Shape) -> SolidFeatures:
         cylindrical_faces=len(cylinders),
         holes_detected=len(hole_axes),
         setups=count_setups(solid, hole_axes),
+        thin_wall_count=count_thin_walls(solid),
     )
 
 
@@ -43,6 +46,7 @@ def merge_features(parts: list[SolidFeatures]) -> SolidFeatures:
         cylindrical_faces=sum(p.cylindrical_faces for p in parts),
         holes_detected=sum(p.holes_detected for p in parts),
         setups=sum(p.setups for p in parts),
+        thin_wall_count=sum(p.thin_wall_count for p in parts),
     )
 
 
