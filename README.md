@@ -4,18 +4,38 @@ Upload a `.step` file, pick a quantity, get an explainable CNC quote for 6061 al
 `Vendra_Quoting_Engine_PRD.md` for requirements, `DECISIONS.md` for why things are built this way,
 and `REPORT.md` for how parsing, pricing and lead time work.
 
-> Status: geometry, pricing, lead time, API, worker and web pages are built. The **complexity score is
-> not implemented yet** and the pricing is fitted to a single data point, the sample gear at qty 1 (see
-> [Known limitations](#known-limitations)).
+> Status: geometry, pricing, lead time, API, worker and web pages are built. There is no single
+> `complexity_score` on purpose (see [Known limitations](#known-limitations)), and the pricing is fitted
+> to a single data point, the sample gear at qty 1.
 
 ## What the app does
 
-- Reads a `.step`/`.stp` CAD file with OpenCascade and measures the bounding box, volume, surface area,
-  face and edge counts, and holes.
-- Prices CNC machining of the part in 6061 aluminum: material, machine time and setup, with setup
-  amortized over the quantity, plus a lead time in business days.
+Upload a STEP file and a quantity; get an explainable CNC quote for 6061 aluminum, kept in a dashboard.
+
+**Highlights**
+
+- **Upload a CAD file:** drag and drop (or pick) a `.step`/`.stp` file, up to 50 MB, and choose a
+  quantity from 1 to 10,000.
+- **Get a quote in about a second:** per-unit price, total order cost and lead time in business days.
+- **See where the price comes from:** a split into material, machine time and setup, plus an expandable
+  "How this was calculated" panel with every intermediate value.
+- **See what the engine found in your part:** bounding box, volume, surface area, face and edge counts,
+  holes, setups and thin walls.
+- **Clear errors:** a file that is not a valid solid fails with a readable message instead of a wrong
+  price.
+- **Quote history dashboard:** every quote is saved; filter by status, sort newest or oldest, show or
+  hide archived quotes, page through results.
+- **Review workflow:** mark a quote as reviewed or archive it, from the dashboard or the quote page.
+- **Geometry from the command line:** analyze a STEP file with no server or database.
+- **Runs locally or in Docker:** one command starts MongoDB, API, worker and web.
+
+**How it works**
+
+- Reads the file with OpenCascade and measures the bounding box, volume, surface area, face and edge
+  counts, and holes.
+- Prices machining: material, machine time and setup, with setup amortized over the quantity, plus a
+  lead time in business days.
 - Stores every quote in MongoDB and shows them in a dashboard where a reviewer can change the status.
-- The geometry engine also runs on its own from the command line, with no server or database.
 
 Parts of the repo:
 
@@ -71,6 +91,8 @@ uv run python backend/analyze_geometry.py samples/vendra-gear.STEP
 ```
 
 It prints one line of JSON and exits 0. On a bad file it prints a JSON error and exits non-zero.
+Options: `--pretty` indents the output, `--out FILE` also writes it to a file, `--stock-allowance MM`
+changes the 3 mm stock allowance, `--material` picks the material. `python -m geometry` works too.
 Output for the sample gear (formatted here for reading):
 
 ```json
@@ -135,7 +157,7 @@ Output for the sample gear (formatted here for reading):
     "total_cost_per_unit": 44.08,
     "total_order_cost": 440.79
   },
-  "lead_time_days": 6
+  "lead_time_days": 7
 }
 ```
 
@@ -162,13 +184,15 @@ curl http://localhost:8000/api/quotes/<id>
 | Method | Path | Purpose |
 |---|---|---|
 | `POST` | `/api/quotes` | Upload `file` (.step/.stp) and `quantity` (1-10,000). 202 + queued quote |
-| `GET` | `/api/quotes` | List, newest first. `status`, `limit` (1-100, default 20), `skip`. Returns `{items, total, limit, skip}` |
+| `GET` | `/api/quotes` | List. `status`, `sort` (`newest` default, `oldest`), `exclude_archived`, `limit` (1-100, default 20), `skip`. Returns `{items, total, limit, skip}` |
 | `GET` | `/api/quotes/{id}` | Full quote: geometry, cost breakdown, lead time, or the error |
 | `PATCH` | `/api/quotes/{id}/status` | `{"status": "reviewed"}` or `"archived"` (see allowed moves below) |
 | `GET` | `/api/health` | `{"ok": true}` |
 
 Statuses: `queued` → `processing` → `quoted` or `failed`; a reviewer can then set `reviewed` (from
-`quoted`) or `archived` (from `quoted`, `reviewed`, `failed`). Anything else is a 422.
+`quoted`) or `archived` (from `quoted`, `reviewed`, `failed`). Anything else is a 422. If the status
+changed since it was read (for example the worker finished), the answer is a 409. Archiving deletes the
+stored STEP file; the path and hash stay in the database.
 
 Every error has the same shape: `{ "error": { "code", "message" } }`. Interactive docs:
 http://localhost:8000/docs (dev only).
@@ -188,7 +212,7 @@ http://localhost:8000/docs (dev only).
 
   ```
   material_order = max(stock_mass_kg x $5.00 x quantity, $10.00)
-  machine        = (roughing_min + hole_min + edge_min) / 60 x $100
+  machine        = (roughing_min + hole_min + edge_min) / 60 x $100   # edge_min capped at 60
   setup          = (programming_hours + fixturing_hours) x $100 / quantity
   ```
 
@@ -201,9 +225,10 @@ http://localhost:8000/docs (dev only).
 - **Thin walls** are walls less than **3 mm** thick (assumption). The geometry engine counts them and
   stores `thin_wall_count`.
 - **Holes** cost a flat 2 min each (assumption); depth is not modeled.
-- **Edge time** is `edge count x 0.05 min` (3 s per edge), an assumption: the machine slows and
-  re-accelerates where the tool path changes direction, so more edges add time. It is not measured, and
-  the edge count includes the seam lines CAD adds to cylinders.
+- **Edge time** is `min(edge count x 0.05 min, 60 min)` (3 s per edge, capped at one hour per part), an
+  assumption: the machine slows and re-accelerates where the tool path changes direction, so more
+  edges add time. The cap keeps a part with thousands of edges from being priced by edge count alone.
+  It is not measured, and the edge count includes the seam lines CAD adds to cylinders.
 - **Setup hours** are `programming (0.10 + 0.19 x log2(faces)) + 0.10 x setups`. Loading and unloading
   is part of the fixturing hours, so there is no separate handling term. The 0.19 is the one fitted
   number (see Known limitations); the other two are assumptions.
@@ -211,8 +236,8 @@ http://localhost:8000/docs (dev only).
 - The material (density, price, machine rate) comes from `backend/geometry/materials.py`, which holds
   one entry, 6061 aluminum. `--material` on the geometry CLI picks it.
 - Lead time is `5 + ceil(machine days) + complexity buffer`, in whole business days, where machine
-  days = machine hours / 8 and the buffer is `ceil(machine days x 0.5 x min(faces / 100, 1))`.
-  Both rates are assumptions (see `PricingConfig`).
+  days = (setup hours + cycle hours x quantity) / 8 and the buffer is
+  `ceil(machine days x 0.5 x min(faces / 100, 1))`. Both rates are assumptions (see `PricingConfig`).
 - **No finish assumed:** parts are priced as machined, with no finishing pass, so surface area does not
   drive cost. Standard tolerance; no threads, coatings or inspection reports.
 - Quotes are processed asynchronously by a worker, so the API replies `202` and the client polls.
@@ -226,7 +251,9 @@ The formulas and the reasoning for each are in `REPORT.md`; decisions and altern
 
 ## Known limitations
 
-- **No complexity score.** The lead-time complexity
+- **No `complexity_score`, by design.** The challenge's example output has one, but a single combined
+  score would double count the complexity already priced through the other features (holes, edges,
+  thin walls, setups, faces). Complexity is shown as those counts instead. The lead-time complexity
   buffer uses face count only, so it ignores setups and thin walls. The price is driven by removed
   volume, hole count, edge count, thin-wall count, setup count and face count. The
   surface-area-to-volume ratio is measured but does not change the price.
@@ -240,7 +267,8 @@ The formulas and the reasoning for each are in `REPORT.md`; decisions and altern
 - **Heuristic feature detection.** Holes and thin walls (under 3 mm) are counted; pockets, slots,
   threads and undercuts are not detected. Two same-size blind holes drilled from opposite faces along
   one axis count as one. The thin-wall count samples points on each face, so it can change with the
-  sampling density (the gear is 1 at most densities and 2 at one).
+  sampling density (the gear is 1 at most densities, 2 at one and 0 at the coarsest), and it is skipped
+  (reported as 0) above 3,000 faces to stay within the analysis timeout.
 - **Setup count is approximate.** Angled faces and angled holes are ignored.
 - **Stock is a plain block** with a fixed allowance; standard bar and plate sizes are not modeled.
 - **One lead time**, not expedite/standard/economy tiers.

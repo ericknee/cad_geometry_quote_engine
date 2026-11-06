@@ -46,6 +46,37 @@ class ErrorResponse(_Frozen):
     error: ErrorDetail
 
 
+class QuoteDocument(BaseModel):
+    """A quote as stored in the `quotes` collection (the database schema).
+
+    Only the repository uses it. `_id` is MongoDB's own and is not a field here. The API never
+    sends this shape: `QuoteDetail` is the API view and leaves out the internal fields
+    (`file_path`, `attempts`, `started_at`). Later changes are written with `$set` updates, so the
+    model builds a new document and describes the stored shape.
+    """
+
+    # Store the status as its plain string value, not an enum object.
+    model_config = ConfigDict(use_enum_values=True)
+
+    file_name: str
+    file_path: str  # absolute path of the stored STEP file; deleted when the quote is archived
+    file_hash: str  # SHA-256 of the file contents
+    quantity: int = Field(ge=1)
+    material: str
+    status: QuoteStatus = QuoteStatus.QUEUED
+    # Filled in by the worker. All stay None until the quote is quoted.
+    geometry: GeometryResult | None = None
+    cost_breakdown: CostBreakdown | None = None
+    lead_time: LeadTime | None = None
+    lead_time_days: int | None = None  # copy of lead_time.days, for the dashboard list
+    error: ErrorDetail | None = None  # set only when the quote failed
+    # Job bookkeeping.
+    attempts: int = Field(default=0, ge=0)  # times a worker claimed it; drives retries
+    started_at: datetime | None = None  # when the current claim began; finds stale jobs
+    created_at: datetime
+    updated_at: datetime
+
+
 class QuoteDetail(_Frozen):
     """One quote. Geometry, cost and lead time exist only once the quote is `quoted`
     (or later); `error` exists only when it `failed`."""

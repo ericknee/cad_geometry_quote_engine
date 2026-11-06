@@ -4,7 +4,7 @@ import { useState } from "react";
 import Alert from "@/components/Alert";
 import Card from "@/components/Card";
 import DataList from "@/components/DataList";
-import { formatLength, formatNumber } from "@/format";
+import { formatArea, formatLength, formatVolume } from "@/format";
 import type { GeometryResult } from "@/types";
 
 export default function GeometryPanel({ geometry }: { geometry: GeometryResult }) {
@@ -35,9 +35,9 @@ export default function GeometryPanel({ geometry }: { geometry: GeometryResult }
             "Bounding box (L × W × H)",
             `${[length, width, height].map((mm) => formatLength(mm, unit, false)).join(" × ")} ${unit}`,
           ],
-          ["Part volume", `${formatNumber(geometry.volume_cm3)} cm³`],
-          ["Surface area", `${formatNumber(geometry.surface_area_cm2)} cm²`],
-          ["Stock volume", `${formatNumber(geometry.stock_volume_cm3)} cm³`],
+          ["Part volume", formatVolume(geometry.volume_cm3, unit)],
+          ["Surface area", formatArea(geometry.surface_area_cm2, unit)],
+          ["Stock volume", formatVolume(geometry.stock_volume_cm3, unit)],
         ]}
       />
       {geometry.warnings.length > 0 && (

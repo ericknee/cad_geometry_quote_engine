@@ -1,7 +1,7 @@
 # Report
 
-Status: geometry, pricing, lead time, API and worker work. The complexity score is not done, and the
-pricing is fitted to a single data point (see Pricing formula).
+Status: geometry, pricing, lead time, API, worker and web pages work. There is no single complexity
+score, by design, and the pricing is fitted to a single data point (see Pricing formula).
 
 ## Parsing the CAD file
 
@@ -33,7 +33,11 @@ pricing is fitted to a single data point (see Pricing formula).
 - **Thin walls:** a pair of roughly parallel faces closer than 3 mm, found by rays cast inward from
   sample points on each face. Pairs sharing a face count once, and wedge tips (gear teeth) are ignored.
   Gear: 1; bracket: 0. The count can vary with sampling density (the gear is 1 at most densities).
-- **Complexity score: not implemented** (`null`). It is not used in the price.
+- **No `complexity_score`, by design.** The challenge's example output has one, but a single combined
+  score would double count the complexity already priced through holes, edges, thin walls, setups and
+  faces. Complexity is reported as those counts instead.
+- Thin walls are skipped (reported as 0) above 3,000 faces, so a very detailed part does not exceed the
+  analysis timeout.
 
 ## Pricing formula
 
@@ -56,7 +60,7 @@ material_per_unit = material_order / quantity
 ```
 removed_volume_cm3 = stock_volume_cm3 - part_volume_cm3
 mrr                = 50 - (50 - 20) x min(thin_walls, 8) / 8             # cm3 per minute
-cycle_min          = removed_volume_cm3 / mrr  +  holes x 2.0  +  edges x 0.05
+cycle_min          = removed_volume_cm3 / mrr  +  holes x 2.0  +  min(edges x 0.05, 60)
 machine_per_unit   = cycle_min / 60 x 100
 ```
 
@@ -72,7 +76,7 @@ setup_per_unit = setup_hours x 100 / quantity
 | Stock allowance, minimum material | 3 mm per side, $10 per order | Assumption (minimum stock purchase, saw cuts) |
 | MRR (material removal rate) | 50 cm3/min, down to 20 at 8 thin walls | Assumption, not measured |
 | Minutes per hole | 2.0 | Assumption: flat, ignores depth |
-| Minutes per edge | 0.05 (3 s) | Assumption: the machine slows where the tool path turns |
+| Minutes per edge | 0.05 (3 s), capped at 60 min per part | Assumption: the machine slows where the tool path turns; the cap stops edge count alone setting the price |
 | Programming base, fixturing per setup | 0.10 h, 0.10 h | Assumption |
 | Programming per log2(face) | 0.19 h | **Fitted** to the gear quote |
 
@@ -83,7 +87,7 @@ setup_per_unit = setup_hours x 100 / quantity
 - Loading and re-clamping are inside the fixturing hours, so there is no handling term.
 - Thin walls flex under the cutter, so the shop takes lighter cuts and the MRR drops.
 - The edge count includes CAD seam lines on cylinders, so it overstates direction changes.
-- Not priced: finishing (parts are as machined, standard tolerance), the complexity score, SA:V.
+- Not priced: finishing (parts are as machined, standard tolerance), SA:V.
 
 **Worked example: sample gear, quantity 1**
 ```
