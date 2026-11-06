@@ -17,12 +17,15 @@ export function listQuotes(params: {
   status?: QuoteStatus;
   /** Hide archived quotes (ignored by the API when `status` is set). */
   excludeArchived?: boolean;
+  /** By creation time; the API default is newest. */
+  sort?: "newest" | "oldest";
   limit?: number;
   skip?: number;
 }): Promise<QuoteList> {
   const query = new URLSearchParams();
   if (params.status) query.set("status", params.status);
   if (params.excludeArchived) query.set("exclude_archived", "true");
+  if (params.sort) query.set("sort", params.sort);
   if (params.limit !== undefined) query.set("limit", String(params.limit));
   if (params.skip !== undefined) query.set("skip", String(params.skip));
   const qs = query.toString();

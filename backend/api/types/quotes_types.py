@@ -24,6 +24,13 @@ class QuoteStatus(StrEnum):
     ARCHIVED = "archived"
 
 
+class SortOrder(StrEnum):
+    """Order of the quote list, by creation time."""
+
+    NEWEST = "newest"
+    OLDEST = "oldest"
+
+
 class _Frozen(BaseModel):
     model_config = ConfigDict(frozen=True)
 

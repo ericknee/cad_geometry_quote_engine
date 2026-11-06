@@ -11,8 +11,10 @@ export function formatNumber(value: number, digits = 2): string {
 
 export const MM_PER_INCH = 25.4;
 
-export function formatLength(mm: number, unit: "mm" | "in"): string {
-  return unit === "mm" ? `${formatNumber(mm)} mm` : `${formatNumber(mm / MM_PER_INCH, 3)} in`;
+/** A length converted from mm; `withUnit: false` gives just the number, e.g. for "a × b × c mm". */
+export function formatLength(mm: number, unit: "mm" | "in", withUnit = true): string {
+  const text = unit === "mm" ? formatNumber(mm) : formatNumber(mm / MM_PER_INCH, 3);
+  return withUnit ? `${text} ${unit}` : text;
 }
 
 export function formatDays(days: number | null | undefined): string {

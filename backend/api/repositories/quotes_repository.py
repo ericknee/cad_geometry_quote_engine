@@ -13,7 +13,7 @@ from pricing.models import CostBreakdown, LeadTime
 from pymongo import ASCENDING, DESCENDING, ReturnDocument
 from pymongo.asynchronous.database import AsyncDatabase
 
-from api.types.quotes_types import ErrorDetail, QuoteStatus, QuoteSummary
+from api.types.quotes_types import ErrorDetail, QuoteStatus, QuoteSummary, SortOrder
 
 COLLECTION = "quotes"
 
@@ -79,14 +79,21 @@ class QuotesRepository:
         return _to_document(await self._quotes.find_one({"_id": oid}))
 
     async def list_page(
-        self, status: QuoteStatus | None, limit: int, skip: int, *, exclude_archived: bool = False
+        self,
+        status: QuoteStatus | None,
+        limit: int,
+        skip: int,
+        *,
+        exclude_archived: bool = False,
+        sort: SortOrder = SortOrder.NEWEST,
     ) -> list[Document]:
         """One page of quotes, newest first. Slim documents: only what a QuoteSummary needs
         (see _SUMMARY_PROJECTION), so the large geometry is never sent. Use find_by_id for all."""
-        # _id breaks ties so pages stay stable when several quotes share a timestamp.
+        # _id breaks ties (same direction) so pages stay stable when quotes share a timestamp.
+        direction = DESCENDING if sort is SortOrder.NEWEST else ASCENDING
         cursor = (
             self._quotes.find(_status_filter(status, exclude_archived), _SUMMARY_PROJECTION)
-            .sort([("created_at", DESCENDING), ("_id", DESCENDING)])
+            .sort([("created_at", direction), ("_id", direction)])
             .skip(skip)
             .limit(limit)
         )

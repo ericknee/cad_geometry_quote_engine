@@ -11,7 +11,7 @@ from api.errors.quotes_errors import (
 )
 from api.repositories.quotes_repository import QuotesRepository
 from api.services.quotes_service import ALLOWED_TRANSITIONS, QuotesService
-from api.types.quotes_types import QuoteStatus
+from api.types.quotes_types import QuoteStatus, SortOrder
 from bson import ObjectId
 
 from tests.api.test_file_storage import STEP, FakeUpload
@@ -99,6 +99,14 @@ async def test_list_filters_by_status(service, repo):
     page = await service.list_quotes(QuoteStatus.QUOTED, limit=20, skip=0)
     assert [item.id for item in page.items] == [quoted]
     assert page.total == 1
+
+
+async def test_list_can_sort_oldest_first_across_pages(service):
+    ids = [(await service.create_quote(FakeUpload("a.step", STEP), q)).id for q in (1, 2, 3)]
+    first = await service.list_quotes(None, limit=2, skip=0, sort=SortOrder.OLDEST)
+    assert [item.id for item in first.items] == [ids[0], ids[1]]
+    rest = await service.list_quotes(None, limit=2, skip=2, sort=SortOrder.OLDEST)
+    assert [item.id for item in rest.items] == [ids[2]]
 
 
 async def test_list_can_hide_archived_and_keeps_the_total_in_step(service, repo):

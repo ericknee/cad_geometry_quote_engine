@@ -11,6 +11,7 @@ from api.types.quotes_types import (
     QuoteDetail,
     QuoteList,
     QuoteStatus,
+    SortOrder,
     StatusUpdate,
 )
 
@@ -45,8 +46,11 @@ async def list_quotes(
     skip: Annotated[int, Query(ge=0)] = 0,
     # Hides archived quotes from the unfiltered list; ignored when `status` is given.
     exclude_archived: bool = False,
+    sort: SortOrder = SortOrder.NEWEST,
 ) -> QuoteList:
-    return await service.list_quotes(status, limit, skip, exclude_archived=exclude_archived)
+    return await service.list_quotes(
+        status, limit, skip, exclude_archived=exclude_archived, sort=sort
+    )
 
 
 @router.get("/{quote_id}", response_model=QuoteDetail, responses={404: _ERRORS})
